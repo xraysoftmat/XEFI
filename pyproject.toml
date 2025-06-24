@@ -32,7 +32,6 @@
 
 [dependency-groups]
 dev = [
-    {include-group = "gui"}, # Include GUI dependencies in dev
     {include-group = "docs"}, # Include documentation dependencies in dev
     "pre-commit",
     "pytest",
