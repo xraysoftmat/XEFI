@@ -8,17 +8,20 @@ from matplotlib.figure import Figure, SubFigure
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from typing import Literal, TypeVar
+from abc import ABCMeta
 
 T = TypeVar("T", bound=np.float64)
 """Type variable for floating intensity results."""
 
 
-class BaseResult:
+class BaseResult(metaclass=ABCMeta):
     """
-    A base class for handling results in XEFI.
+    An abstract base class for handling results in XEFI.
 
     Can be called to calculate the total electric field for a given (set of) z-coordinate(s),
     if a result has been calculated.
+
+    Multi-dimensional results can be calculated along `theta` and `beam_energy` dimensions.
 
     Parameters
     ----------
@@ -29,6 +32,8 @@ class BaseResult:
     ----------
     z : npt.NDArray[np.floating] | None
         The z-coordinate of the (N) interfaces in Angstroms (Å).
+    L : int | None
+        The number of beam energies considered.
     M : int | None
         The number of angles of incidence considered.
     N : int | None
@@ -51,23 +56,27 @@ class BaseResult:
         The Fresnel reflection coefficients for each interface and angle (N, M).
     fresnel_t : npt.NDArray[np.complexfloating] | None
         The Fresnel transmission coefficients for each interface and angle (N, M).
+    layer_names : list[str] | None
+        The names of the layers (N+1), if provided.
     """
 
     def __init__(self, **kwargs) -> None:
         self.z: npt.NDArray[np.floating] | None
         """The z-coordinate of the (N) interfaces in Angstroms (Å)."""
+        self.L: int | None
+        """The number of beam energies considered."""
         self.M: int | None
         """The number of angles of incidence."""
         self.N: int | None
         """The number of interfaces, corresponding to N+1 layers."""
-        self.beam_energy: float | None
-        """The energy of the X-ray beam in eV."""
-        self.theta: npt.NDArray[np.floating] | None
-        """The angles of incidence (M) in the first layer (i=0) in degrees."""
+        self.beam_energy: npt.NDArray[np.floating] | float | None
+        """The energy(s) of the X-ray beam in eV."""
+        self.theta: npt.NDArray[np.floating] | float | None
+        """The angle(s) of incidence (M) in the first layer (i=0) in degrees."""
         self.angles_of_incidence: npt.NDArray[np.complexfloating] | None
-        """The complex angles of incidence in each layer in radians (N+1, M)."""
+        """The complex angles of incidence in each layer in radians (L, M, N+1)."""
         self.wavevectors: npt.NDArray[np.complexfloating] | None
-        """The complex z-component wavevector in each layer (N+1, M)."""
+        """The complex z-component wavevector in each layer (L, M, N+1)."""
         self.refractive_indices: npt.NDArray[np.complexfloating] | None
         """The complex refractive indices of each layer (N+1)."""
         self.critical_angles: npt.NDArray[np.floating] | None
@@ -83,7 +92,9 @@ class BaseResult:
         self.R: npt.NDArray[np.complexfloating] | None
         """The complex reflection amplitude in each layer for each angle (N+1, M)."""
         self.X: npt.NDArray[np.complexfloating] | None
-        """The complex ratio of downward and upward propogating fields in each layer for each angle (N+1, M)."""
+        """The complex ratio of downward and upward propagating fields in each layer for each angle (N+1, M)."""
+        self.fig: Figure | SubFigure | None
+        """The matplotlib figure for plotted results."""
 
         # Initialize all attributes to None
         self.reset()
@@ -96,7 +107,7 @@ class BaseResult:
                 raise AttributeError(f"BaseResult has no attribute '{key}'")
 
     @property
-    def wavelength(self) -> float | None:
+    def wavelength(self) -> npt.NDArray[np.floating] | float | None:
         """
         The wavelength of the X-ray in Angstroms (Å).
 
@@ -265,9 +276,15 @@ class BaseResult:
         cbar_loc: Literal["fig", "ax"] = "fig",
         cmap: Colormap = plt.cm.get_cmap("viridis"),
         norm: Literal["linear", "log"] = "linear",
+        m: int | None = None,
+        l: int | None = None,
     ) -> tuple[Figure | SubFigure, Axes]:
         """
-        Generate a pretty plot of the X-ray electric field intensity as a function of depth.
+        Generate a pretty 2D plot of the X-ray electric field intensity as a function of depth.
+
+        The second dimension is either `theta` (angle of incidence) or `beam_energy`.
+        This dimension is automatically chosen if one of the dimensions is singular (i.e., has length 1).
+        Otherwise, the user must specify either `m` or `l` to choose a singular index.
 
         Parameters
         ----------
@@ -286,6 +303,15 @@ class BaseResult:
         norm : Literal["linear", "log"], optional
             The normalization to use for the colormap. If "linear", uses a linear normalization;
             if "log", uses a logarithmic normalization. Defaults to "linear".
+        m : int | None, optional
+            A singular index to consider for the angles of incidence. Defaults to None.
+        l : int | None, optional
+            A singular index to consider for the beam energies. Defaults to None.
+
+        Returns
+        -------
+        tuple[Figure | SubFigure, Axes]
+            A tuple containing the matplotlib figure and axes used for the plot.
         """
         if fig is None and ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=300)
@@ -295,6 +321,26 @@ class BaseResult:
             # fig is not None and ax is None
             assert fig is not None
             ax = fig.add_subplot(1, 1, 1)
+
+        # Ensure L or M is singular for 2D plotting.
+        if self.L > 1 and self.M > 1:
+            assert isinstance(self.theta, np.ndarray)
+            assert isinstance(self.beam_energy, np.ndarray)
+            if m is not None and l is not None:
+                raise ValueError(
+                    "Values for both `l` and `m` are incompatible, as data is required to be 2D."
+                )
+            elif m is not None:
+                theta = self.theta[m]
+                energy = self.beam_energy
+            elif l is not None:
+                energy = self.beam_energy[l]
+                theta = self.theta
+            else:
+                raise ValueError(
+                    "This method is designed for 2D plotting. Ensure that either L or M are singular, \
+                    or choose a singular index using `l` or `m` function parameters."
+                )
 
         plot_z: npt.NDArray[np.float64]
         if z_vals is None:
@@ -355,6 +401,8 @@ class BaseResult:
             cbar = fig.colorbar(sm, cax=ax, label="Electric Field Intensity (A.U.)")
         else:
             raise ValueError("`cbar_loc` must be either 'fig' or 'ax'.")
+
+        return fig, ax
 
     def generate_pretty_figure_XEFI_intensity(
         self,
