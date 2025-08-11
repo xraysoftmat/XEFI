@@ -145,6 +145,7 @@ def XEF(
     # Roughness
     if z_roughness is not None:
         z_roughness = np.asarray(z_roughness, dtype=np.float64, copy=True)
+        assert z_roughness.ndim == 1
 
     # Refractive indices require verification based on supplied data type
     ref_idxs: npt.NDArray[np.complexfloating]
@@ -322,11 +323,16 @@ def XEF(
     if z_roughness is not None:
         assert isinstance(result, BasicRoughResult)
         S: npt.NDArray[np.complex128] = np.exp(
-            -2 * z_roughness**2 * wavevectors[:, :, :-1] * wavevectors[:, :, 1:]
+            -2
+            * z_roughness[np.newaxis, np.newaxis, :] ** 2
+            * wavevectors[:, :, :-1]
+            * wavevectors[:, :, 1:]
         )
         """Roughness reflection factor for each interface (L, M, N)"""
         T: npt.NDArray[np.complex128] = np.exp(
-            -2 * z_roughness**2 * (wavevectors[:, :, :-1] + wavevectors[:, :, 1:]) ** 2
+            -2
+            * z_roughness[np.newaxis, np.newaxis, :] ** 2
+            * (wavevectors[:, :, :-1] + wavevectors[:, :, 1:]) ** 2
         )
         """Roughness transmission factor for each interface (L, M, N)"""
 
