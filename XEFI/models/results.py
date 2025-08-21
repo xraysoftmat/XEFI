@@ -3,7 +3,7 @@ A module for basic result handling in XEFI.
 """
 
 import numpy as np, numpy.typing as npt
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt, matplotlib.colors 
 from matplotlib.figure import Figure, SubFigure
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, LogNorm, Normalize
@@ -239,26 +239,27 @@ class BaseResult(metaclass=ABCMeta):
         z0 = np.r_[self.z[0], self.z]  # Include 0 for the top of the first layer (air)
 
         if L != 1 and M != 1:
-            for i in range(N + 1):
-                # For each layer
+            # For each layer
+            for i in range(N+1):
+                j = i - 1 if i > 0 else 0 # Which interface to use for T/R.
                 subset = layer_idxs == i  # Get the indices for this layer
                 z_subset = z_vals[subset]  # Get the z values for this layer
 
                 # Calculate the distance into the layer from the top of the layer.
                 d = (
-                    z_subset - z0[i]
-                )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
+                    z_subset - z0[j]
+                ) # for semi-infinite i=0, we flip, for i=N, we use the last z value.
 
                 transmission = (
                     # Amplitude
-                    self.T[:, :, i, np.newaxis] # newaxis for the specific z values
+                    self.T[:, :, j, np.newaxis] # newaxis for the specific z values
                     # Downward propogating phase
                     * np.exp(-1j * self.wavevectors[:, :, i, np.newaxis] * d[np.newaxis, np.newaxis, :])
                 )
                 reflection = (
                     (
                         # Amplitude
-                        self.R[:, :, i, np.newaxis]
+                        self.R[:, :, j, np.newaxis]
                         # Upward propogating phase
                         * np.exp(
                             1j * self.wavevectors[:, :, i, np.newaxis] * d[np.newaxis, np.newaxis, :]
@@ -269,26 +270,27 @@ class BaseResult(metaclass=ABCMeta):
                 )
                 E_total[:, :, subset] = transmission + reflection
         elif L == 1 and M == 1:
-            for i in range(N + 1):
-                # For each layer
+            # For each layer
+            for i in range(N+1):
+                j = i - 1 if i > 0 else 0 # Which interface to use for T/R.
                 subset = layer_idxs == i  # Get the indices for this layer
                 z_subset = z_vals[subset]  # Get the z values for this layer
 
                 # Calculate the distance into the layer from the top of the layer.
                 d = (
-                    z_subset - z0[i]
+                    z_subset - z0[j]
                 )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
 
                 transmission = (
                     # Amplitude
-                    self.T[i] # newaxis for the specific z values
+                    self.T[j] # newaxis for the specific z values
                     # Downward propogating phase
                     * np.exp(-1j * self.wavevectors[i] * d)
                 )
                 reflection = (
                     (
                         # Amplitude
-                        self.R[i]
+                        self.R[j]
                         # Upward propogating phase
                         * np.exp(
                             1j * self.wavevectors[i] * (d)
@@ -300,26 +302,27 @@ class BaseResult(metaclass=ABCMeta):
                 E_total[:, :, subset] = transmission + reflection
         else:
             assert L == 1 or M == 1
-            for i in range(N + 1):
-                # For each layer
+            # For each layer
+            for i in range(N+1):
+                j = i - 1 if i > 0 else 0 # Which interface to use for T/R.
                 subset = layer_idxs == i  # Get the indices for this layer
                 z_subset = z_vals[subset]  # Get the z values for this layer
 
                 # Calculate the distance into the layer from the top of the layer.
                 d = (
-                    z_subset - z0[i]
+                    z_subset - z0[j]
                 )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
 
                 transmission = (
                     # Amplitude
-                    self.T[:, i, np.newaxis] # newaxis for the specific z values
+                    self.T[:, j, np.newaxis] # newaxis for the specific z values
                     # Downward propogating phase
                     * np.exp(-1j * self.wavevectors[:, i, np.newaxis] * d[np.newaxis, :])
                 )
                 reflection = (
                     (
                         # Amplitude
-                        self.R[:, i, np.newaxis]
+                        self.R[:, j, np.newaxis]
                         # Upward propogating phase
                         * np.exp(
                             1j * self.wavevectors[:, i, np.newaxis] * (d[np.newaxis, :])
@@ -365,7 +368,7 @@ class BaseResult(metaclass=ABCMeta):
         ax: Axes | None = None,
         cbar_loc: Literal["fig", "ax"] = "fig",
         cmap: Colormap = plt.cm.get_cmap("viridis"),
-        norm: Literal["linear", "log"] = "linear",
+        norm: Literal["linear", "log"] | Normalize = "linear",
         m: int | None = None,
         l: int | None = None,
         grid_z: bool = True,
@@ -394,9 +397,10 @@ class BaseResult(metaclass=ABCMeta):
             if "ax", it is padded to the right of the axes. Defaults to "fig".
         cmap : Colormap, optional
             The colormap to use for the plot. Defaults to matplotlib's "viridis".
-        norm : Literal["linear", "log"], optional
+        norm : Literal["linear", "log"] | matplotlib.colors.Normalize, optional
             The normalization to use for the colormap. If "linear", uses a linear normalization;
             if "log", uses a logarithmic normalization. Defaults to "linear".
+            Can also provide a custom normalization object.
         m : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
         l : int | None, optional
@@ -503,6 +507,8 @@ class BaseResult(metaclass=ABCMeta):
             norm_fn = LogNorm(
                 vmin=intensity[intensity > 0].min(), vmax=intensity.max()
             )
+        elif isinstance(norm, Normalize) or issubclass(norm, Normalize):
+            norm_fn = norm
         else:
             raise ValueError("`norm` must be either 'linear' or 'log'.")
 

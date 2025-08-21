@@ -299,7 +299,7 @@ def XEF(
         (L, M, N + 1), dtype=np.complex128
     )
     """Z-component wavevectors at each energy (L) and angle (M) for each layer (N + 1)."""
-    wavevectors[:, :, 0] = k0[:, np.newaxis] * np.sin(theta[np.newaxis, :])
+    wavevectors[:, :, 0] = -k0[:, np.newaxis] * np.sin(theta[np.newaxis, :])
 
     # Angle of incidence in each layer
     angles_of_incidence: npt.NDArray[np.complexfloating] = np.zeros(
@@ -316,20 +316,20 @@ def XEF(
         / ref_idxs[:, np.newaxis, 1:]
     )
     # Calculate wavevectors for each layer
-    wavevectors[:, :, 1:] = k0[:, np.newaxis, np.newaxis] * np.sqrt(
+    wavevectors[:, :, 1:] = -k0[:, np.newaxis, np.newaxis] * np.sqrt(
         ref_idxs[:, np.newaxis, 1:] ** 2 - np.cos(theta[np.newaxis, :, np.newaxis]) ** 2
     )
     # Small angle approximation for cosine:
     # wavevectors[:, :, 1:] = k0[:, np.newaxis, np.newaxis] * angles_of_incidence[:, :, 1:]
 
-    # fig, ax = plt.subplots(2, 1, sharex=True)
-    # for i in range(L):
-    #     for j in range(N):
-    #         ax[0].plot(angles, wavevectors[i, :, j].real, label=f"Interface {j,j+1}")
-    #         ax[1].plot(angles, wavevectors[i, :, j].imag, label=f"Interface {j,j+1}")
-    # ax[0].set_ylabel("Wavevector Re")
-    # ax[1].set_ylabel("Wavevector Im")
-    # ax[1].set_xlabel("Angle (degrees)")
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    for i in range(L):
+        for j in range(N):
+            ax[0].plot(angles, wavevectors[i, :, j].real, label=f"Interface {j,j+1}")
+            ax[1].plot(angles, wavevectors[i, :, j].imag, label=f"Interface {j,j+1}")
+    ax[0].set_ylabel("Wavevector Re")
+    ax[1].set_ylabel("Wavevector Im")
+    ax[1].set_xlabel("Angle (degrees)")
 
     result.wavevectors = wavevectors
     result.angles_of_incidence = angles_of_incidence
@@ -370,14 +370,20 @@ def XEF(
     result.critical_angles = critical_angles
 
     # Calculate the field strenghts, using roughness contributions if provided
-    X = np.zeros((L, M, N), dtype=np.complex128)
-    """The ratio of the field strengths for each layer calculated at the top interface (L, M, N)"""
-    R = np.zeros((L, M, N), dtype=np.complex128)
-    """The reflection field strengths for each layer calculated at the top interface (L, M, N)"""
-    T = np.zeros((L, M, N), dtype=np.complex128)
-    """The transmission field strengths for each layer calculated at the top interface (L, M, N)"""
+    X = np.zeros((L, M, N+1), dtype=np.complex128)
+    """The ratio of the field strengths within each layer (L, M, N+1). 
+    For the substrate layer X[N+1]=0."""
+    # """The ratio of the field strengths for each layer calculated at the top interface (L, M, N+1), 
+    # with an additional `bottom substrate` layer where X[N+1]=0."""
+    R = np.zeros((L, M, N+1), dtype=np.complex128)
+    """The reflection field strengths for each layer calculated at the top interface (L, M, N+1),
+    with an additional `bottom substrate` layer where R[N+1]=0"""
+    T = np.zeros((L, M, N+1), dtype=np.complex128)
+    """The transmission field strengths for each layer calculated at the top interface (L, M, N+1),
+    with an additional `bottom substrate` layer where T[N+1]!=0"""
     T[:, :, 0] = 1.0  # Vacuum layer has no transmission
     if z_roughness is not None:
+        raise ValueError("Not working yet.")
         assert isinstance(result, BasicRoughResult)
         
         # Roughness factors:
@@ -411,7 +417,7 @@ def XEF(
             d_jp1 = abs(z[i + 2] - z[i + 1]) if i < N - 2 else 0
             """The thickness of the layer below interface j+1"""
             a_jp1 = (
-                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
+                np.exp(1j * wavevectors[:, :, i] * d_jp1)
                 if i < N - 1
                 else 0.0  # at i+1 = N, semi-infinite X_{N} = 0.
             )
@@ -424,12 +430,12 @@ def XEF(
         result.X = X
 
         # Calculate the field strengths
-        for i in range(0, N):
+        for i in range(0, N-1):
             d_j = abs(z[i + 1] - z[i]) if (i < N - 1) else 0
             d_jp1 = abs(z[i + 2] - z[i + 1]) if i < N - 2 else 0
-            a_j = np.exp(-1j * wavevectors[:, :, i] * d_j) if i < N else 0.0
+            a_j = np.exp(1j * wavevectors[:, :, i] * d_j) if i < N else 0.0
             a_jp1 = (
-                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
+                np.exp(1j * wavevectors[:, :, i] * d_jp1)
                 if i < N - 1
                 else 0.0  # at i+1 = N, semi-infinite X_N = 0.0
             )
@@ -444,53 +450,82 @@ def XEF(
     else:
         # Calculate X below the ith interface..
         # X[N-1] = 0 as the initial condition.
-        # Start from second last interface.
-        for i in range(N - 2, -1, -1):
-            d_jp1 = abs(z[i + 1] - z[i]) if i < N - 2 else 0
-            """The thickness of the layer below interface j+1"""
-            a_jp1 = (
-                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
-                if i < N - 1
-                else 0.0  # at i+1 = N, semi-infinite X_{N} = 0.
-            )
-            X[:, :, i] = (
-                (fresnel_r[:, :, i] + a_jp1**2 * X[:, :, i + 1])
-                / (1 + a_jp1**2 * X[:, :, i + 1] * fresnel_r[:, :, i])
-                if i != N - 1
-                else fresnel_r[:, :, i]
-            )
+        # Start from the second last slab.
+        for i in range(N-1, -1, -1): # i=interface
+            j = i+1 # wavevector slab index
+            
+            # # DEV
+            # d_jp1 = abs(z[i + 2] - z[i + 1]) if j < N - 2 else 0
+            # """The thickness of the layer below interface i+1"""
+            # a_jp1 = (
+            #     np.exp(-1j * wavevectors[:, :, j+1] * d_jp1)
+            # )
+            # X[:, :, i] = (
+            #     (fresnel_r[:, :, i] + a_jp1**2 * X[:, :, i + 1])
+            #     / (1 + a_jp1**2 * X[:, :, i + 1] * fresnel_r[:, :, i])
+            # )
+            
+            # TOLAN
+            a_jp1 = X[:, :, i + 1] * np.exp(-2j * wavevectors[:, :, j] * z[i])
+            X[:, :, i] = np.exp(2j * wavevectors[:, :, i] * z[i]) * (
+                (fresnel_r[:, :, i] + a_jp1)
+                / (1 + fresnel_r[:, :, i] * a_jp1)
+            ) if i < N else fresnel_r[:,:,i] * np.exp(2j * wavevectors[:, :, i] * z[i]) # at i = N-1, semi-infinite X_N+1 = 0.0
+            
+            # print(f"Layer {i}: X = {X[0,5,i]}, \t a_jp1 = {a_jp1}, \t fresnel_r = {fresnel_r[0, 5, i]} \t djp1 = {d_jp1}")
         result.X = X
 
         # Calculate the field strengths at the ith interface.
-        for i in range(0, N):
-            d_j = z[i + 1] - z[i] if (i < N - 1) else 0
-            d_jp1 = z[i + 2] - z[i + 1] if i < N - 2 else 0
-            a_j = np.exp(-1j * wavevectors[:, :, i] * d_j)
-            a_jp1 = (
-                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
-                if i < N - 1
-                else 0.0  # at i+1 = N, semi-infinite X_N = 0.0
+        R[:,:,0] = X
+        for i in range(0, N-1):
+            # DEV
+            # d_j = z[i + 1] - z[i] if (i < N - 1) else 0
+            # d_jp1 = z[i + 2] - z[i + 1] if i < N - 2 else 0
+            # a_j = np.exp(-1j * wavevectors[:, :, i+1] * d_j)
+            # a_jp1 = (
+            #     np.exp(-1j * wavevectors[:, :, i+2] * d_jp1)
+            #     if i < N - 1
+            #     else 0.0  # at i+1 = N, semi-infinite X_N = 0.0
+            # )
+            
+            # T[:, :, i + 1] = (
+            #     (a_j * T[:, :, i] * fresnel_t[:, :, i]) / (
+            #     1 + a_jp1**2 * X[:, :, i + 1] * fresnel_r[:, :, i])
+            # )
+            # R[:, :, i] = a_j**2 * X[:, :, i] * T[:, :, i]
+            
+            # TOLAN
+            wv_diff = wavevectors[:, :, i+1] - wavevectors[:, :, i]
+            wv_add = wavevectors[:, :, i+1] + wavevectors[:, :, i]
+            R[:,:,i+1] = (
+                1/(fresnel_t[:, :, i]) * (
+                    T[:,:,i] * fresnel_r[:,:,i] * np.exp(1j * (wv_add) * z[i])
+                    + R[:,:,i] * np.exp(1j * (wv_diff) * z[i])
+                )
             )
-            T[:, :, i + 1] = (a_j * T[:, :, i] * fresnel_t[:, :, i]) / (
-                1 + a_jp1**2 * X[:, :, i + 1] * fresnel_r[:, :, i]
+            T[:,:,i+1] = (
+                1/(fresnel_t[:, :, i]) * (
+                    T[:,:,i] * np.exp(-1j * (wv_diff) * z[i])
+                    + R[:,:,i] * fresnel_r[:,:,i] * np.exp(-1j * (wv_add) * z[i])
+                )
             )
-            R[:, :, i] = a_j**2 * X[:, :, i] * T[:, :, i]
+            
         result.R = R
         result.T = T
 
     fig,ax = plt.subplots(3,1, sharex=True, figsize=(10,8))
     if L == 1:
         for i in range(N):
-            ax[0].plot(angles, result.R[0, :, i], label = layer_names[i+1])
-            ax[1].plot(angles, result.T[0, :, i], label = layer_names[i+1])
-            ax[2].plot(angles, result.X[0, :, i], label = layer_names[i+1])
-            
+            ax[0].plot(angles, np.abs(result.R[0, :, i])**2, label = layer_names[i+1])
+            ax[1].plot(angles, np.abs(result.T[0, :, i])**2, label = layer_names[i+1])
+            ax[2].plot(angles, np.abs(result.X[0, :, i])**2, label = layer_names[i+1])
+
     if L == 1:
         for i in range(N):
             for l in range(3):
                 # Add vertical line
                 ax[l].axvline(x=np.rad2deg(critical_angles[0, i]), color='k', linestyle='--')
-                ax[l].set_ylim(1e-6, 2.0)
+                ax[l].set_ylim(1e-3, 2.0)
 
     ax[0].set_yscale("log")
     ax[1].set_yscale("log")
