@@ -7,7 +7,7 @@ Supports the use of the `KKCalc` package to calculate the index of refraction wi
 ### The Model
 To make this model representative of the code, we count $N+1$ layers from $i=0$ to $i=N$ inclusive, as `python` indexes.
 
-![Model](docs/geometry.png)
+![Model](docs/static/graphics/geometry.png)
 Here, layers $i=0$ and $i=N$ are semi-infinite layers, typically modelling air/vacuum and a substrate respectively. Boundary conditions allow us to set the incident amplitude $T_0 = 1$, and the reflected amplitude $R_{N}=0$. We define the following quantities:
 | Variable     | Description
 | -            | -
