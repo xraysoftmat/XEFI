@@ -7,14 +7,26 @@ from typing import Callable
 from XEFI.models.results import BaseResult
 import warnings
 import scipy.constants as sc
+import matplotlib.pyplot as plt
 
-en2wav: float = 2 * sc.pi * sc.e / (sc.h * sc.c)
-"""
-Conversion factor energy in eV to wavevector in Angstroms
+en2wav: float = sc.h * sc.c / sc.e * 1e10
+r"""
+Conversion factor from energy in eV to wavelength in angstroms.
 
 .. math::
     \lambda = (h \times c) / (E \times e)
-    \k_0 = 2 \pi / \lambda
+    wav = en2wav / E
+
+"""
+en2wvec: float = 2 * sc.pi / en2wav
+r"""
+Conversion factor from energy in eV to wavevector in inverse angstroms.
+
+.. math::
+    \lambda = (h \times c) / (E \times e) * 1e10
+    \lambda = en2wav / E
+    \k = 2 \pi / (\lambda)
+    \k = en2wvec * E
 """
 
 # Support for KKCalc
@@ -48,14 +60,16 @@ class BasicRoughResult(BasicResult):
 
     def __init__(self):
         # Declare the properties
+        self.z_roughness: npt.NDArray[np.floating] | None = None
+        """The roughness of the (N) interfaces in Angstroms (Å)."""
         self.rough_S: npt.NDArray[np.complex128] | None = None
-        """Roughness reflection factor for each interface (L, M, N)"""
+        """Roughness reflection factor for each energy, angle and interface (L, M, N)"""
         self.rough_T: npt.NDArray[np.complex128] | None = None
-        """Roughness transmission factor for each interface (L, M, N)"""
+        """Roughness transmission factor for each energy, angle and interface (L, M, N)"""
         self.fresnel_r_rough: npt.NDArray[np.complex128] | None = None
-        """The Fresnel reflection coefficients with roughness for each interface (L, M, N)"""
+        """The Fresnel reflection coefficients with roughness for each energy, angle and interface (L, M, N)"""
         self.fresnel_t_rough: npt.NDArray[np.complex128] | None = None
-        """The Fresnel transmission coefficients with roughness for each interface (L, M, N)"""
+        """The Fresnel transmission coefficients with roughness for each energy, angle and interface (L, M, N)"""
         # Call the parent constructor
         super().__init__()
 
@@ -63,6 +77,7 @@ class BasicRoughResult(BasicResult):
         """
         Clear/initialise the result object attributes to None.
         """
+        self.z_roughness = None
         self.rough_S = None
         self.rough_T = None
         self.fresnel_r_rough = None
@@ -72,7 +87,7 @@ class BasicRoughResult(BasicResult):
 
 
 def XEF(
-    beam_energy: list[float] | npt.NDArray[np.floating] | float,
+    energies: list[float] | npt.NDArray[np.floating] | float,
     angles: list[float] | npt.NDArray[np.floating] | float,
     z: list[float] | npt.NDArray[np.floating],
     refractive_indices: (
@@ -99,8 +114,9 @@ def XEF(
     z : list[float] | npt.NDArray[np.floating]
         The interface locations in Angstroms. Must be a list or array of floats.
     refractive_indices : list[complex] | npt.NDArray[np.complexfloating] | list[Callable] | list["asp_complex"]
-        The refractive indices for each layer. Can be a list of complex numbers, a numpy array of complex numbers,
-        a list of `KKCalc` `asp_complex` objects, or a list of Callable functions that return complex numbers.
+        The refractive indices for each energy and layer. 
+        Can be a list of complex numbers (L, N+1), a numpy array of complex numbers (L, N+1),
+        a list of `KKCalc` `asp_complex` objects (N+1), or a list of Callable functions that return complex numbers (N+1).
     z_roughness : list[float] | npt.NDArray[np.floating] | None, optional
         The roughness of the interfaces in Angstroms. If provided, it should be a list or array of floats with the same length as `z`.
         If None, no roughness is applied, by default None.
@@ -122,30 +138,43 @@ def XEF(
 
     ## Collect the properties
     # Beam energy
-    beam_energy = np.atleast_1d(beam_energy)
+    energies = np.atleast_1d(energies)
     """The beam energy(s) in eV (with length L)"""
+    result.energies = energies
     # Energy number
-    L: int = beam_energy.shape[0]
+    L: int = energies.shape[0]
     """Number of energies."""
     result.L = L
     # Angles
     angles = np.atleast_1d(angles)
     theta = np.deg2rad(angles)
     """The angles in radians (with length M)"""
+    result.theta = theta
     # Angle number
     M: int = angles.shape[0]
     """Number of angles."""
     result.M = M
     # Interface locations
     z = np.asarray(z, dtype=np.float64, copy=True)
+    result.z = z
     # Interface number
-    N: int = z.shape[0] - 1
-    """Number of interfaces."""
+    N: int = z.shape[0]
+    """Number of interfaces N."""
     result.N = N
+    # Labels
+    if layer_names is not None:
+        assert len(layer_names) == N + 1, "Layer names must match the number of layers (N+1)."
+        result.layer_names = layer_names.copy()
+    else:
+        result.layer_names = None
+
     # Roughness
     if z_roughness is not None:
         z_roughness = np.asarray(z_roughness, dtype=np.float64, copy=True)
         assert z_roughness.ndim == 1
+        result.z_roughness = z_roughness
+    else:
+        result.z_roughness = None
 
     # Refractive indices require verification based on supplied data type
     ref_idxs: npt.NDArray[np.complexfloating]
@@ -195,12 +224,11 @@ def XEF(
                 This may not be correct for X-ray calculations.",
                 UserWarning,
             )
-
     elif (
-        isinstance(refractive_indices, list)
+        isinstance(refractive_indices, (list, np.ndarray))
         and has_KKCalc
         # Allow float for vacuum or air - i.e. no material absorption.:
-        and all(isinstance(n, (float, asp_complex)) for n in refractive_indices)
+        and all(isinstance(n, (float, complex, asp_complex)) for n in refractive_indices)
         and len(refractive_indices) == N + 1
     ):
         # Valid refractive indices for a single energy using KKCalc
@@ -209,14 +237,18 @@ def XEF(
             refractive_indices
         ):  # Iterate over the layers, apply the energy.
             if isinstance(mat_n, asp_complex):
-                ref_idxs[:, i] = mat_n.refractive_index(
-                    beam_energy
+                ref_idxs[:, i] = mat_n.eval_refractive_index(
+                    energies
                 )  # Apply the energy to the KKCalc object
-            else:
-                ref_idxs[:, i] = mat_n + 0j  # Convert float to complex
+            elif isinstance(mat_n, complex):
+                ref_idxs[:, i] = mat_n
+            else: # float
+                ref_idxs[:, i] = mat_n + 0j  # Convert to complex
 
-    elif isinstance(refractive_indices, list) and all(
-        callable(n) for n in refractive_indices
+    elif (
+        isinstance(refractive_indices, list) 
+        and len(refractive_indices) == N + 1
+        and all(callable(n) for n in refractive_indices)
     ):
         # Valid refractive indices for multiple energies using Callable
         ref_idxs = np.zeros((L, N + 1), dtype=np.complex128)
@@ -226,26 +258,27 @@ def XEF(
         for i, mat_n in enumerate(
             refractive_indices
         ):  # Iterate over the layers, apply the energy.
+            assert callable(mat_n)
             if L == 1:
                 ref_idxs[0, i] = mat_n(
-                    beam_energy
+                    energies
                 )  # Apply the energy to the Callable function
             elif single_energy_calc:
                 for j in range(L):
                     ref_idxs[j, i] = mat_n(
-                        beam_energy[j]
+                        energies[j]
                     )  # Apply the energy to the Callable function
             else:
                 if callable(mat_n):
                     try:
                         ref_idxs[:, i] = mat_n(
-                            beam_energy
+                            energies
                         )  # Apply the energy to the Callable function
                     except TypeError | ValueError as e:
                         single_energy_calc = True
                         for j in range(L):
                             ref_idxs[j, i] = mat_n(
-                                beam_energy[j]
+                                energies[j]
                             )  # Apply the energy to the Callable function
 
     else:
@@ -254,19 +287,19 @@ def XEF(
                             a numpy array of complex numbers, a list of `KKCalc` `asp_complex` objects \
                             or a list of Callable functions for multiple energies."
         )
-
+        
     ## Generate result data
     # Wavevector magnitude in vacuum
-    k0: npt.NDArray[np.floating] = en2wav * beam_energy
-    """The wavevector magnitude in vacuum for each energy (L)."""
+    k0: npt.NDArray[np.floating] = en2wvec * energies # convert energy to wavevector.
+    """The wavevector magnitude (per Å) in vacuum for each energy (L)."""
     result.k0 = k0
 
     # Wavevector-z in each layer
     wavevectors: npt.NDArray[np.complexfloating] = np.zeros(
         (L, M, N + 1), dtype=np.complex128
     )
-    """Z-component wavevectors at each energy (L) and angle (M) for each layer (N)."""
-    wavevectors[:, :, 0] = k0[:, np.newaxis] * np.cos(theta)
+    """Z-component wavevectors at each energy (L) and angle (M) for each layer (N + 1)."""
+    wavevectors[:, :, 0] = k0[:, np.newaxis] * np.sin(theta[np.newaxis, :])
 
     # Angle of incidence in each layer
     angles_of_incidence: npt.NDArray[np.complexfloating] = np.zeros(
@@ -289,6 +322,15 @@ def XEF(
     # Small angle approximation for cosine:
     # wavevectors[:, :, 1:] = k0[:, np.newaxis, np.newaxis] * angles_of_incidence[:, :, 1:]
 
+    # fig, ax = plt.subplots(2, 1, sharex=True)
+    # for i in range(L):
+    #     for j in range(N):
+    #         ax[0].plot(angles, wavevectors[i, :, j].real, label=f"Interface {j,j+1}")
+    #         ax[1].plot(angles, wavevectors[i, :, j].imag, label=f"Interface {j,j+1}")
+    # ax[0].set_ylabel("Wavevector Re")
+    # ax[1].set_ylabel("Wavevector Im")
+    # ax[1].set_xlabel("Angle (degrees)")
+
     result.wavevectors = wavevectors
     result.angles_of_incidence = angles_of_incidence
 
@@ -307,80 +349,108 @@ def XEF(
     # )
     result.fresnel_r = fresnel_r
     result.fresnel_t = fresnel_t
+    
+    fig,ax = plt.subplots(2,1, sharex=True)
+    for l in range(L):
+        for i in range(N):
+            ax[0].plot(angles, fresnel_r[l, :, i].real, label="Fr R (Re) " + layer_names[i+1])
+            ax[1].plot(angles, fresnel_r[l, :, i].imag, label="Fr R (Im) " + layer_names[i+1])
+            ax[0].plot(angles, fresnel_t[l, :, i].real, label="Fr T (Re) " + layer_names[i+1])
+            ax[1].plot(angles, fresnel_t[l, :, i].imag, label="Fr T (Im) " + layer_names[i+1])
+    ax[1].set_xlabel("Angle (degrees)")
+    ax[0].set_ylabel("Fresnel Coefficients (Re)")
+    ax[1].set_ylabel("Fresnel Coefficients (Im)")
+    ax[0].legend()
+    ax[1].legend()
+    plt.show()
 
     # Calculate the critical angles
-    critical_angles: npt.NDArray[np.floating] = np.sqrt(2 - (1 - ref_idxs[1:].real))
+    critical_angles: npt.NDArray[np.floating] = np.sqrt(2 * (1 - ref_idxs[:, 1:].real))
+    """The critical angles of each energy and material interface (excluding vacuum/air) (L, N)"""
     result.critical_angles = critical_angles
 
     # Calculate the field strenghts, using roughness contributions if provided
-    X = np.zeros((L, M, N + 1), dtype=np.complex128)
-    """The ratio of the field strengths for each layer (L, M, N)"""
-    R = np.zeros((L, M, N + 1), dtype=np.complex128)
-    """The reflection field strengths for each layer (L, M, N)"""
-    T = np.zeros((L, M, N + 1), dtype=np.complex128)
-    """The transmission field strengths for each layer (L, M, N)"""
+    X = np.zeros((L, M, N), dtype=np.complex128)
+    """The ratio of the field strengths for each layer calculated at the top interface (L, M, N)"""
+    R = np.zeros((L, M, N), dtype=np.complex128)
+    """The reflection field strengths for each layer calculated at the top interface (L, M, N)"""
+    T = np.zeros((L, M, N), dtype=np.complex128)
+    """The transmission field strengths for each layer calculated at the top interface (L, M, N)"""
     T[:, :, 0] = 1.0  # Vacuum layer has no transmission
     if z_roughness is not None:
         assert isinstance(result, BasicRoughResult)
-        S: npt.NDArray[np.complex128] = np.exp(
+        
+        # Roughness factors:
+        rr_S: npt.NDArray[np.complex128] = np.exp(
             -2
             * z_roughness[np.newaxis, np.newaxis, :] ** 2
             * wavevectors[:, :, :-1]
             * wavevectors[:, :, 1:]
         )
         """Roughness reflection factor for each interface (L, M, N)"""
-        T: npt.NDArray[np.complex128] = np.exp(
+        rr_T: npt.NDArray[np.complex128] = np.exp(
             -2
             * z_roughness[np.newaxis, np.newaxis, :] ** 2
             * (wavevectors[:, :, :-1] + wavevectors[:, :, 1:]) ** 2
         )
         """Roughness transmission factor for each interface (L, M, N)"""
 
-        fresnel_r_rough: npt.NDArray[np.complex128] = fresnel_r * S
+        fresnel_r_rough: npt.NDArray[np.complex128] = fresnel_r * rr_S
         """The Fresnel reflection coefficients with roughness for each interface (L, M, N)"""
-        fresnel_t_rough: npt.NDArray[np.complex128] = fresnel_t * T
+        fresnel_t_rough: npt.NDArray[np.complex128] = fresnel_t * rr_T
         """The Fresnel transmission coefficients with roughness for each interface (L, M, N)"""
 
         # Store the roughness results in the result object
-        result.rough_S = S
-        result.rough_T = T
+        result.rough_S = rr_S
+        result.rough_T = rr_T
         result.fresnel_r_rough = fresnel_r_rough
         result.fresnel_t_rough = fresnel_t_rough
 
         # Recursively calculate the ratio of the field strengths
         for i in range(N - 1, -1, -1):
+            d_jp1 = abs(z[i + 2] - z[i + 1]) if i < N - 2 else 0
+            """The thickness of the layer below interface j+1"""
             a_jp1 = (
-                np.exp(1j * wavevectors[:, :, i] * (z[i + 1] - z[i]))
-                if i != N - 1
+                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
+                if i < N - 1
                 else 0.0  # at i+1 = N, semi-infinite X_{N} = 0.
             )
             X[:, :, i] = (
                 (fresnel_r_rough[:, :, i] + a_jp1**2 * X[:, :, i + 1])
-                / (1 + a_jp1**2 * X[:, :, +1] * fresnel_r_rough[:, :, i])
+                / (1 + a_jp1**2 * X[:, :, i+1] * fresnel_r_rough[:, :, i])
                 if i != N - 1
-                else fresnel_r_rough[:, :, i]
+                else fresnel_r_rough[:, :, i] # when X_N = R_N = 0
             )
         result.X = X
 
         # Calculate the field strengths
         for i in range(0, N):
-            a_j = np.exp(-1j * wavevectors[:, :, i] * z[i])
+            d_j = abs(z[i + 1] - z[i]) if (i < N - 1) else 0
+            d_jp1 = abs(z[i + 2] - z[i + 1]) if i < N - 2 else 0
+            a_j = np.exp(-1j * wavevectors[:, :, i] * d_j) if i < N else 0.0
             a_jp1 = (
-                np.exp(1j * wavevectors[:, :, i] * z[i + 1])
-                if i + 1 != N
+                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
+                if i < N - 1
                 else 0.0  # at i+1 = N, semi-infinite X_N = 0.0
             )
+            
             T[:, :, i + 1] = (a_j * T[:, :, i] * fresnel_t_rough[:, :, i]) / (
                 1 + a_jp1**2 * X[:, :, i + 1] * fresnel_r_rough[:, :, i]
             )
+            
             R[:, :, i] = a_j**2 * X[:, :, i] * T[:, :, i]
         result.R = R
         result.T = T
     else:
-        for i in range(N - 1, -1, -1):
+        # Calculate X below the ith interface..
+        # X[N-1] = 0 as the initial condition.
+        # Start from second last interface.
+        for i in range(N - 2, -1, -1):
+            d_jp1 = abs(z[i + 1] - z[i]) if i < N - 2 else 0
+            """The thickness of the layer below interface j+1"""
             a_jp1 = (
-                np.exp(1j * wavevectors[:, :, i] * (z[i + 1] - z[i]))
-                if i != N - 1
+                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
+                if i < N - 1
                 else 0.0  # at i+1 = N, semi-infinite X_{N} = 0.
             )
             X[:, :, i] = (
@@ -391,12 +461,14 @@ def XEF(
             )
         result.X = X
 
-        # Calculate the field strengths
+        # Calculate the field strengths at the ith interface.
         for i in range(0, N):
-            a_j = np.exp(-1j * wavevectors[:, :, i] * z[i])
+            d_j = z[i + 1] - z[i] if (i < N - 1) else 0
+            d_jp1 = z[i + 2] - z[i + 1] if i < N - 2 else 0
+            a_j = np.exp(-1j * wavevectors[:, :, i] * d_j)
             a_jp1 = (
-                np.exp(1j * wavevectors[:, :, i] * z[i + 1])
-                if i + 1 != N
+                np.exp(-1j * wavevectors[:, :, i] * d_jp1)
+                if i < N - 1
                 else 0.0  # at i+1 = N, semi-infinite X_N = 0.0
             )
             T[:, :, i + 1] = (a_j * T[:, :, i] * fresnel_t[:, :, i]) / (
@@ -406,6 +478,29 @@ def XEF(
         result.R = R
         result.T = T
 
+    fig,ax = plt.subplots(3,1, sharex=True, figsize=(10,8))
+    if L == 1:
+        for i in range(N):
+            ax[0].plot(angles, result.R[0, :, i], label = layer_names[i+1])
+            ax[1].plot(angles, result.T[0, :, i], label = layer_names[i+1])
+            ax[2].plot(angles, result.X[0, :, i], label = layer_names[i+1])
+            
+    if L == 1:
+        for i in range(N):
+            for l in range(3):
+                # Add vertical line
+                ax[l].axvline(x=np.rad2deg(critical_angles[0, i]), color='k', linestyle='--')
+                ax[l].set_ylim(1e-6, 2.0)
+
+    ax[0].set_yscale("log")
+    ax[1].set_yscale("log")
+    ax[2].set_yscale("log")
+    ax[-1].set_xlabel("Angle (degrees)")
+    ax[0].set_ylabel("Reflectance")
+    ax[1].set_ylabel("Transmittance")
+    ax[2].set_ylabel("Field Strength")
+    ax[0].legend()
+
     # Finishing up - reduce dimensions if L or M is 1.
     result.X = np.squeeze(X)[()]
     result.R = np.squeeze(R)[()]
@@ -413,6 +508,7 @@ def XEF(
     result.wavevectors = np.squeeze(wavevectors)[()]
     result.angles_of_incidence = np.squeeze(angles_of_incidence)[()]
     result.refractive_indices = np.squeeze(ref_idxs)[()]
+    result.critical_angles = np.squeeze(critical_angles)[()]
 
     # Return the result
     return result
