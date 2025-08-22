@@ -236,7 +236,8 @@ class BaseResult(metaclass=ABCMeta):
         E_total = np.zeros((L, M, len(z_vals)), dtype=np.complex128)
 
         # Top of layer definitions
-        z0 = np.r_[self.z[0], self.z]  # Include 0 for the top of the first layer (air)
+        # z0 = np.r_[self.z[0], self.z]  # Include 0 for the top of the first layer (air)
+        z0 = self.z
 
         if L != 1 and M != 1:
             # For each layer

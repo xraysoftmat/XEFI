@@ -155,7 +155,8 @@ def XEF(
     """Number of angles."""
     result.M = M
     # Interface locations
-    z = np.asarray(z, dtype=np.float64, copy=True)
+    assert z is not None, "Interface locations (z) must be provided."
+    z = np.array(z, dtype=np.float64, copy=True)
     result.z = z
     # Interface number
     N: int = z.shape[0]
@@ -170,11 +171,9 @@ def XEF(
 
     # Roughness
     if z_roughness is not None:
-        z_roughness = np.asarray(z_roughness, dtype=np.float64, copy=True)
+        z_roughness = np.array(z_roughness, dtype=np.float64, copy=True)
         assert z_roughness.ndim == 1
         result.z_roughness = z_roughness
-    else:
-        result.z_roughness = None
 
     # Refractive indices require verification based on supplied data type
     ref_idxs: npt.NDArray[np.complexfloating]
@@ -217,7 +216,7 @@ def XEF(
         and len(refractive_indices) == N + 1
     ):
         # Valid refractive indices for a single energy
-        ref_idxs = np.asarray(refractive_indices, dtype=np.complex128, copy=True)
+        ref_idxs = np.array(refractive_indices, dtype=np.complex128, copy=True)
         if sum(ref_idxs.imag != 0) == 0:
             warnings.warn(
                 "Refractive indices provided are all real. \
@@ -476,7 +475,8 @@ def XEF(
         result.X = X
 
         # Calculate the field strengths at the ith interface.
-        R[:,:,0] = X
+        
+        R[:,:,0] = X[:,:,0]
         for i in range(0, N-1):
             # DEV
             # d_j = z[i + 1] - z[i] if (i < N - 1) else 0
@@ -519,13 +519,15 @@ def XEF(
             ax[0].plot(angles, np.abs(result.R[0, :, i])**2, label = layer_names[i+1])
             ax[1].plot(angles, np.abs(result.T[0, :, i])**2, label = layer_names[i+1])
             ax[2].plot(angles, np.abs(result.X[0, :, i])**2, label = layer_names[i+1])
+    ax[0].plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k')
+    ax[0].plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray')
 
     if L == 1:
         for i in range(N):
             for l in range(3):
                 # Add vertical line
-                ax[l].axvline(x=np.rad2deg(critical_angles[0, i]), color='k', linestyle='--')
-                ax[l].set_ylim(1e-3, 2.0)
+                ax[l].axvline(x=np.rad2deg(critical_angles[0, i]), color='k', linestyle='--', linewidth=0.5, alpha=0.2)
+                ax[l].set_ylim(1e-5, 2.0)
 
     ax[0].set_yscale("log")
     ax[1].set_yscale("log")
