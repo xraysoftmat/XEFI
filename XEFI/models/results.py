@@ -9,11 +9,19 @@ from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from typing import Literal, TypeVar
 from abc import ABCMeta
+from enum import Enum
 # import scipy.constants as sc 
 
 T = TypeVar("T", bound=np.float64)
 """Type variable for floating intensity results."""
 
+class XEF_method(Enum):
+    """
+    An enumerate for the XEF calculation method.
+    """
+    tolan = "tolan"
+    dev = "dev"
+    ohta = "ohta"
 
 class BaseResult(metaclass=ABCMeta):
     """
@@ -85,19 +93,21 @@ class BaseResult(metaclass=ABCMeta):
         self.k0: npt.NDArray[np.floating] | float | None
         """The incident vacuum wavevector for each energy (L)."""
         self.fresnel_r: npt.NDArray[np.complexfloating] | None
-        """The Fresnel reflection coefficients for each energy, angle and interface (L, M, M)."""
+        """The Fresnel reflection coefficients for each energy, angle and interface (L, M, N)."""
         self.fresnel_t: npt.NDArray[np.complexfloating] | None
-        """The Fresnel transmission coefficients for each energy, angle and interface (L, M, M)."""
+        """The Fresnel transmission coefficients for each energy, angle and interface (L, M, N)."""
         self.T: npt.NDArray[np.complexfloating] | None
-        """The complex transmission amplitude for each energy, angle and interface (L, M, M)."""
+        """The complex transmission amplitude for each energy, angle and interface (L, M, N)."""
         self.R: npt.NDArray[np.complexfloating] | None
-        """The complex reflection amplitude, for each energy, angle and interface (L, M, M)."""
+        """The complex reflection amplitude, for each energy, angle and interface (L, M, N)."""
         self.X: npt.NDArray[np.complexfloating] | None
-        """The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, M)."""
+        """The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, N)."""
         self.fig: Figure | SubFigure | None
         """The matplotlib figure for plotted results."""
         self.layer_names: list[str] | None
         """The names of the layers (N+1), if provided."""
+        self.method: XEF_method | None
+        """The XEF calculation method used."""
 
         # Initialize all attributes to None
         self.reset()
@@ -279,14 +289,14 @@ class BaseResult(metaclass=ABCMeta):
 
                 # Calculate the distance into the layer from the top of the layer.
                 d = (
-                    z_subset - z0[j]
+                    z_subset - z0[0]
                 )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
 
                 transmission = (
                     # Amplitude
                     self.T[j] # newaxis for the specific z values
                     # Downward propogating phase
-                    * np.exp(-1j * self.wavevectors[i] * d)
+                    * np.exp(1j * self.wavevectors[i] * d)
                 )
                 reflection = (
                     (
@@ -294,7 +304,7 @@ class BaseResult(metaclass=ABCMeta):
                         self.R[j]
                         # Upward propogating phase
                         * np.exp(
-                            1j * self.wavevectors[i] * (d)
+                            -1j * self.wavevectors[i] * (d)
                         )
                     )
                     if i < N
@@ -303,38 +313,31 @@ class BaseResult(metaclass=ABCMeta):
                 E_total[:, :, subset] = transmission + reflection
         else:
             assert L == 1 or M == 1
-            # For each layer
+            z0 = np.r_[z0[0], z0]  # Include the top of the first layer (air)
+            # # For each layer
             for i in range(N+1):
-                j = i - 1 if i > 0 else 0 # Which interface to use for T/R.
+                j = i - 1 if i > 0 else 0 # Which interface to use for T/R. 
+                # For each layer
                 subset = layer_idxs == i  # Get the indices for this layer
                 z_subset = z_vals[subset]  # Get the z values for this layer
-
+            
                 # Calculate the distance into the layer from the top of the layer.
-                d = (
-                    z_subset - z0[j]
-                )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
-
+                d = z_subset - z0[i] # for semi-infinite i=0, we flip, for i=N, we use the last z value.
+            
                 transmission = (
-                    # Amplitude
-                    self.T[:, j, np.newaxis] # newaxis for the specific z values
-                    # Downward propogating phase
+                    self.T[:, j, np.newaxis] 
                     * np.exp(-1j * self.wavevectors[:, i, np.newaxis] * d[np.newaxis, :])
                 )
                 reflection = (
-                    (
-                        # Amplitude
-                        self.R[:, j, np.newaxis]
-                        # Upward propogating phase
-                        * np.exp(
-                            1j * self.wavevectors[:, i, np.newaxis] * (d[np.newaxis, :])
-                        )
-                    )
-                    if i < N
-                    else 0.0
-                )
+                    self.R[:, j, np.newaxis] 
+                    * np.exp(1j * self.wavevectors[:, i, np.newaxis] * d[np.newaxis, :])
+                ) if i < N else 0.0
+                
+                # print(i, transmission[-1], reflection[-1])
+                
                 E_total[:, :, subset] = transmission + reflection
 
-        return np.squeeze(E_total) # Remove excess dimensions.
+            return np.squeeze(E_total) # Remove excess dimensions.
 
     def electric_field_intensity(
         self, z_vals: npt.ArrayLike
