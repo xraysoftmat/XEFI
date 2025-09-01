@@ -307,7 +307,7 @@ def XEF(
         (L, M, N + 1), dtype=np.complex128
     )
     """Z-component wavevectors at each energy (L) and angle (M) for each layer (N + 1)."""
-    wavevectors[:, :, 0] = -k0[:, np.newaxis] * np.sin(theta[np.newaxis, :])
+    wavevectors[:, :, 0] = k0[:, np.newaxis] * np.sin(theta[np.newaxis, :])
 
     # Angle of incidence in each layer
     angles_of_incidence: npt.NDArray[np.complexfloating] = np.zeros(
@@ -325,20 +325,28 @@ def XEF(
         / ref_idxs[:, np.newaxis, 1:]
     )
     # Calculate wavevectors for each layer
-    wavevectors[:, :, 1:] = -k0[:, np.newaxis, np.newaxis] * np.sqrt(
-        ref_idxs[:, np.newaxis, 1:] ** 2 - np.cos(theta[np.newaxis, :, np.newaxis]) ** 2
+    wavevectors[:, :, 1:] = (
+        k0[:, np.newaxis, np.newaxis] 
+        * np.sqrt(
+            (ref_idxs[:, np.newaxis, 1:] ** 2) 
+            - (np.cos(theta[np.newaxis, :, np.newaxis]) ** 2)
+        )
     )
+    
+    for i in range(N+1):
+        print(f"wave layer {i}\t", wavevectors[:, 5, i])
+    
     # Small angle approximation for cosine:
     # wavevectors[:, :, 1:] = k0[:, np.newaxis, np.newaxis] * angles_of_incidence[:, :, 1:]
 
-    # fig, ax = plt.subplots(2, 1, sharex=True)
-    # for i in range(L):
-    #     for j in range(N):
-    #         ax[0].plot(angles, wavevectors[i, :, j].real, label=f"Interface {j,j+1}")
-    #         ax[1].plot(angles, wavevectors[i, :, j].imag, label=f"Interface {j,j+1}")
-    # ax[0].set_ylabel("Wavevector Re")
-    # ax[1].set_ylabel("Wavevector Im")
-    # ax[1].set_xlabel("Angle (degrees)")
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    for i in range(L):
+        for j in range(N+1):
+            ax[0].plot(angles, wavevectors[i, :, j].real, label=f"Layer {j}")
+            ax[1].plot(angles, wavevectors[i, :, j].imag, label=f"Layer {j}")
+    ax[0].set_ylabel("Wavevector Re")
+    ax[1].set_ylabel("Wavevector Im")
+    ax[1].set_xlabel("Angle (degrees)")
 
     result.wavevectors = wavevectors
     result.angles_of_incidence = angles_of_incidence
@@ -460,15 +468,15 @@ def XEF(
     if X is not None:
         axin3 = ax[2].inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
     if L == 1:
-        for i in range(N):
-            ax[0].plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i+1], alpha=0.7)
-            ax[1].plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i+1], alpha=0.7)
+        for i in range(N+1):
+            ax[0].plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
+            ax[1].plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
             if X is not None:
-                ax[2].plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i+1], alpha=0.7)
-            axin1.plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i+1], alpha=0.7)
-            axin2.plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i+1], alpha=0.7)
+                ax[2].plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
+            axin1.plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
+            axin2.plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
             if X is not None:
-                axin3.plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i+1], alpha=0.7)
+                axin3.plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
     ax[0].plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
     ax[0].plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray', alpha=0.7)
     axin1.plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
@@ -586,23 +594,20 @@ def XEF_Abeles_Ohta(
     # Calculate other products:
     matrix = unitmatrix
     for i in range(N-1, -1, -1):
-        matrix = np.matmul(C[:, :, i, :, :], matrix)
+        matrix = np.matmul(C[:, :, i, :, :], matrix) # as C indexes from 1, and D indexes from 0.
         D[:, :, i, :, :] = matrix
     
     # Transmission and Reflection Coefficients
     # 0th index is above the first boundary, 1st to jth values are below the jth boundary
-    T = np.zeros((L, M, N), dtype=np.complex128)
-    R = np.zeros((L, M, N), dtype=np.complex128)
-    for i in range(N):
-        denom = np.prod(fresnel_t[:, :, i:], axis=2)
-        T[:, :, i] = D[:, :, i, 0, 0] / denom
-        R[:, :, i] = D[:, :, i, 1, 0] / denom
-        # tprod = np.prod(fresnel_t[:, :, :i+1], axis=2) # excludes i+1
-        # T[:, :, i] = tprod * D[:, :, i, 0, 0] / D[:, :, 0, 0, 0]
-        # R[:, :, i] = tprod * D[:, :, i, 1, 0] / D[:, :, 0, 0, 0]
-
+    T = np.zeros((L, M, N+1), dtype=np.complex128)
+    R = np.zeros((L, M, N+1), dtype=np.complex128)
+    
+    for i in range(N+1):
+        tprod = np.prod(fresnel_t[:, :, :i+1], axis=2) # excludes i+1
+        T[:, :, i] = tprod * D[:, :, i, 0, 0] / D[:, :, 0, 0, 0]
+        R[:, :, i] = tprod * D[:, :, i, 1, 0] / D[:, :, 0, 0, 0]
+        
     return T, R
-
 
 def XEF_Parratt_Tolan(
     L : int,
@@ -726,22 +731,26 @@ def XEF_Parratt_Dev(
     # X indexes from layer 0 to layer N (i.e. the N+1'th layer, substrate.)
     # X_0 is therefore "outside" the surface.
     
-    for j in range(N-1, -1, -1): # One level below the substrate.
+    for j in range(N-1, -1, -1): # One level above the substrate.
         # To calculate X_j, we need X_jp1, a_jp1, r_j.
-        d_jp1: complex 
+        d_jp1: float
         """The thickness of the layer below interface j"""
         if j+1 >= N: # Substrate layer.
             d_jp1 = 0 # No thickness.
-            a_jp1 = 1.0
+            a_jp1 = np.zeros((L, M), dtype=np.complex128) # Should be 1, but no contribution as X_jp1 in this case is also zero.
         else:
-            d_jp1 = (z[j] - z[j + 1]) if j < N - 1 else 0
-            a_jp1 = np.exp(-1j * wavevectors[:, :, j+1] * d_jp1)
+            d_jp1 = abs(z[j + 1] - z[j]) if j < N - 1 else 0
+            # This should be decaying with distance. 
+            # As wavevector has positive complex value, 1j * (+ve)j = -ve
+            a_jp1 = np.exp(1j * wavevectors[:, :, j+1] * d_jp1) # Dev Eq 12
 
         X[:, :, j] = (
-            (fresnel_r[:, :, j] + a_jp1**2 * X[:, :, j + 1])
-            / (1 + a_jp1**2 * X[:, :, j + 1] * fresnel_r[:, :, j])
-        )
-        
+            (fresnel_r[:, :, j] + (a_jp1 ** 2) * X[:, :, j + 1])
+            / (1 + (a_jp1 ** 2) * X[:, :, j + 1] * fresnel_r[:, :, j]) # Dev Eq 11
+        ) if j != N-1 else fresnel_r[:, :, j]
+
+        print(f"Layer {j}: X = {X[:,5,j]}, \t a_jp1 = {a_jp1[:,5]}, \n\t fresnel_r = {fresnel_r[:,5,j]} \t djp1 = {d_jp1}\n\twave = {wavevectors[:, 5, j+1]}")
+
     R: npt.NDArray[np.complexfloating] = np.zeros((L, M, N+1), dtype=np.complex128)
     """The electric field amplitude of the reflected propagating wave."""
     T: npt.NDArray[np.complexfloating] = np.zeros((L, M, N+1), dtype=np.complex128)
@@ -750,34 +759,39 @@ def XEF_Parratt_Dev(
     R[:,:,0] = X[:,:,0] # already normalized transmission to one.
     T[:,:,0] = 1.0 # Incident field normalized to one.
     
+    print("------")
+    
     for j in range(0, N):
         # To calculate R and T, we need X_j+1, X_j, a_j, a_j+1, r_j, d_j, d_j+1
         
         # Thicknesses & a_j factors
         if j == 0:
-            dj = 0.0  # No thickness for the first layer (air)
-            djp1 = z[1] - z[0]
-            a_j = 1.0 # No phase accumulation in air
-            a_jp1 = np.exp(-1j * wavevectors[:, :, 1] * djp1)
+            d_j = 0.0  # No thickness for the first layer (air)
+            d_jp1 = abs(z[1] - z[0])
+            a_j = np.ones((L, M)) # No phase accumulation in air
+            a_jp1 = np.exp(1j * wavevectors[:, :, 1] * d_jp1) # Dev Eq 12
         elif j+1 >= N: # Substrate layer
-            dj = (z[j] - z[j-1])
-            djp1 = 0.0 # No thickness for the substrate layer
-            a_j = np.exp(1j * wavevectors[:, :, j] * dj)
-            a_jp1 = 0.0
+            d_j = abs(z[j] - z[j-1])
+            d_jp1 = 0.0 # No thickness for the substrate layer
+            a_j = np.exp(1j * wavevectors[:, :, j] * d_j) # Dev Eq 12
+            a_jp1 = np.zeros((L, M)) 
         else:
-            dj = (z[j] - z[j-1])
-            djp1 = (z[j+1] - z[j])
-            a_j = np.exp(1j * wavevectors[:, :, j] * dj)
-            a_jp1 = np.exp(-1j * wavevectors[:, :, j+1] * djp1)
+            d_j = abs(z[j] - z[j-1])
+            d_jp1 = abs(z[j+1] - z[j])
+            a_j = np.exp(1j * wavevectors[:, :, j] * d_j) # Dev Eq 12
+            a_jp1 = np.exp(1j * wavevectors[:, :, j+1] * d_jp1) # Dev Eq 12
         
         # Calculate the reflection field, from the current layer.
-        R[:, :, j] = a_j **2 * X[:, :, j] * T[:, :, j]
+        R[:, :, j] = a_j **2 * X[:, :, j] * T[:, :, j] # Dev Eq 9
         
         # Calculate the transmission field of the next layer, from the current layer.
         T[:, :, j + 1] = (
             (a_j * T[:, :, j] * fresnel_t[:, :, j])
-            / (1 + a_jp1 **2 * X[:, :, j+1] * fresnel_r[:, :, j])
+            / (1 + a_jp1 **2 * X[:, :, j+1] * fresnel_r[:, :, j]) # Dev Eq 10
         )
+        
+        print(f"Layer {j}: T = {T[:,5,j]}, \t a_jp1 = {a_jp1[:,5]},\n\t fresnel_t = {fresnel_t[:,5,j]} \t djp1 = {d_jp1}")
+        print(f"Layer {j}: R = {R[:,5,j]}, \t a_jp1 = {a_jp1[:,5]},\n\t fresnel_r = {fresnel_r[:,5,j]} \t djp1 = {d_jp1}")
         
     return T, R, X
  

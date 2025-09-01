@@ -59,6 +59,7 @@ class BaseResult(metaclass=ABCMeta):
         The complex refractive indices of each layer (N+1).
     wavevectors : npt.NDArray[np.floating] | None
         The z-component wavevector in each layer (N+1, M).
+        Defined as a magnitude with a postitive complex phase, rather than a vector direction.
     k0 : float | None
         The incident vacuum wavevector.
     fresnel_r : npt.NDArray[np.complexfloating] | None
@@ -85,7 +86,7 @@ class BaseResult(metaclass=ABCMeta):
         self.angles_of_incidence: npt.NDArray[np.complexfloating] | None
         """The complex angles of incidence in each layer in radians (L, M, N+1)."""
         self.wavevectors: npt.NDArray[np.complexfloating] | None
-        """The complex z-component wavevector in each layer (L, M, N+1)."""
+        """The unsigned complex z-component wavevector in each layer (L, M, N+1)."""
         self.refractive_indices: npt.NDArray[np.complexfloating] | None
         """The complex refractive indices of each layer (N+1)."""
         self.critical_angles: npt.NDArray[np.floating] | None
@@ -167,33 +168,11 @@ class BaseResult(metaclass=ABCMeta):
         self.layer_names = None
         return
 
-    def __call__(self, z_vals: npt.ArrayLike) -> npt.NDArray[np.floating]:
-        """
-        Calculate the total electric field intensity at given z-coordinates.
-
-        .. math::
-            I(z) = |E(z)|^2 = E(z) \cdot E^*(z)
-
-        The electric field intensity result has dimensions (L, M), where L is the number
-        of z-coordinates and M (`self.M`) is the number of angles of incidence in `self.theta`.
-
-        Parameters
-        ----------
-        z_vals : npt.ArrayLike
-            The z-coordinates at which to calculate the electric field in angstroms (Å).
-
-        Returns
-        -------
-        npt.NDArray[np.complexfloating]
-            The total electric field at the specified z-coordinates and angle theta. Dimensions are (L, M).
-        """
-        return self.electric_field_intensity(z_vals)
-
     def electric_field(self, z_vals: npt.ArrayLike) -> npt.NDArray[np.complexfloating]:
         """
         Calculate the total electric field at given z-coordinates.
 
-        The electric field result has dimensions (L, M), where L is the number
+        The electric field result has dimensions (L, M, N), where L is the number
         of z-coordinates and M (`self.M`) is the number of angles of incidence in `self.theta`.
 
         Parameters
@@ -240,80 +219,30 @@ class BaseResult(metaclass=ABCMeta):
         z_vals = np.asarray(z_vals, dtype=np.float64)
 
         # Find the indices of z_vals in self.z
-        layer_idxs = np.digitize(z_vals, self.z)
+        z0 = self.z
+        layer_idxs = np.digitize(z_vals, z0)
         # Initialize the electric field array
         
         E_total = np.zeros((L, M, len(z_vals)), dtype=np.complex128)
 
         # Top of layer definitions
-        # z0 = np.r_[self.z[0], self.z]  # Include 0 for the top of the first layer (air)
-        z0 = self.z
+        z0 = np.r_[z0[0], z0]  # Include the top of the first layer for air/vacuum
 
         if L != 1 and M != 1:
-            # For each layer
-            for i in range(N+1):
-                j = i - 1 if i > 0 else 0 # Which interface to use for T/R.
-                subset = layer_idxs == i  # Get the indices for this layer
-                z_subset = z_vals[subset]  # Get the z values for this layer
-
-                # Calculate the distance into the layer from the top of the layer.
-                d = (
-                    z_subset - z0[j]
-                ) # for semi-infinite i=0, we flip, for i=N, we use the last z value.
-
-                transmission = (
-                    # Amplitude
-                    self.T[:, :, j, np.newaxis] # newaxis for the specific z values
-                    # Downward propogating phase
-                    * np.exp(-1j * self.wavevectors[:, :, i, np.newaxis] * d[np.newaxis, np.newaxis, :])
-                )
-                reflection = (
-                    (
-                        # Amplitude
-                        self.R[:, :, j, np.newaxis]
-                        # Upward propogating phase
-                        * np.exp(
-                            1j * self.wavevectors[:, :, i, np.newaxis] * d[np.newaxis, np.newaxis, :]
-                        )
-                    )
-                    if i < N
-                    else 0.0
-                )
-                E_total[:, :, subset] = transmission + reflection
+            raise NotImplementedError("Nope")
         elif L == 1 and M == 1:
-            # For each layer
-            for i in range(N+1):
-                j = i - 1 if i > 0 else 0 # Which interface to use for T/R.
-                subset = layer_idxs == i  # Get the indices for this layer
-                z_subset = z_vals[subset]  # Get the z values for this layer
-
-                # Calculate the distance into the layer from the top of the layer.
-                d = (
-                    z_subset - z0[0]
-                )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
-
-                transmission = (
-                    # Amplitude
-                    self.T[j] # newaxis for the specific z values
-                    # Downward propogating phase
-                    * np.exp(1j * self.wavevectors[i] * d)
-                )
-                reflection = (
-                    (
-                        # Amplitude
-                        self.R[j]
-                        # Upward propogating phase
-                        * np.exp(
-                            -1j * self.wavevectors[i] * (d)
-                        )
-                    )
-                    if i < N
-                    else 0.0
-                )
-                E_total[:, :, subset] = transmission + reflection
+            raise NotImplementedError("Nope")
         else:
             assert L == 1 or M == 1
-            z0 = np.r_[z0[0], z0]  # Include the top of the first layer (air)
+            
+            T = self.T.copy()
+            R = self.R.copy()
+
+            # if self.method == XEF_method.dev:
+            #     # Invert complex sign
+            #     T.imag *= -1
+            #     R.imag *= -1
+            
             # # For each layer
             for i in range(N+1):
                 j = i - 1 if i > 0 else 0 # Which interface to use for T/R. 
@@ -324,16 +253,28 @@ class BaseResult(metaclass=ABCMeta):
                 # Calculate the distance into the layer from the top of the layer.
                 d = z_subset - z0[i] # for semi-infinite i=0, we flip, for i=N, we use the last z value.
             
+                wvs = self.wavevectors[:, i].copy()
+                assert wvs.shape == (self.M,) or wvs.shape == (self.L,), f"Is: {wvs.shape}"
+                
+                # wvs.imag[wvs.imag < 0] *= -1 # Invert complex sign of negatively calculated wavevectors.
+                phase = -1j * wvs[:, np.newaxis] * d[np.newaxis, :]
                 transmission = (
-                    self.T[:, j, np.newaxis] 
-                    * np.exp(-1j * self.wavevectors[:, i, np.newaxis] * d[np.newaxis, :])
+                    T[:, i, np.newaxis]  # indx: angles, z values
+                    * np.exp(phase)
                 )
                 reflection = (
-                    self.R[:, j, np.newaxis] 
-                    * np.exp(1j * self.wavevectors[:, i, np.newaxis] * d[np.newaxis, :])
-                ) if i < N else 0.0
+                    R[:, i, np.newaxis] 
+                    * np.exp(-phase)
+                ) if i < N else np.zeros((len(wvs), len(d)))
                 
-                # print(i, transmission[-1], reflection[-1])
+                
+                print("i: ", i,
+                    "\nTransmission:", transmission[:,-1],
+                    "\nReflection:", reflection[:,-1], 
+                    "\nWave:",  wvs[:],
+                    "\nd:", d[::20],
+                    "\nPhase:", phase
+                    )
                 
                 E_total[:, :, subset] = transmission + reflection
 
@@ -363,7 +304,33 @@ class BaseResult(metaclass=ABCMeta):
         """
         field = self.electric_field(z_vals)
         intensity = (field * np.conj(field)).real
+        print(intensity.shape)
+        print(intensity[:, 500])
         return intensity
+    
+    __call__ = electric_field_intensity # is this sufficient for documentation? probably not.
+    
+    # def __call__(self, z_vals: npt.ArrayLike) -> npt.NDArray[np.floating]:
+    #     """
+    #     Calculate the total electric field intensity at given z-coordinates.
+
+    #     .. math::
+    #         I(z) = |E(z)|^2 = E(z) \cdot E^*(z)
+
+    #     The electric field intensity result has dimensions (L, M), where L is the number
+    #     of z-coordinates and M (`self.M`) is the number of angles of incidence in `self.theta`.
+
+    #     Parameters
+    #     ----------
+    #     z_vals : npt.ArrayLike
+    #         The z-coordinates at which to calculate the electric field in angstroms (Å).
+
+    #     Returns
+    #     -------
+    #     npt.NDArray[np.complexfloating]
+    #         The total electric field at the specified z-coordinates and angle theta. Dimensions are (L, M).
+    #     """
+    #     return self.electric_field_intensity(z_vals)
 
     def generate_pretty_figure_XEFI(
         self,
