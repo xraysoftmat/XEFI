@@ -4,7 +4,7 @@ Module for the XEFI calculation of a basic set of layers.
 
 import numpy as np, numpy.typing as npt
 from typing import Callable
-from XEFI.models.results import BaseResult, XEF_method
+from XEFI.models.results import BaseResult, BaseRoughResult, XEF_method
 import warnings
 import scipy.constants as sc
 import matplotlib.pyplot as plt
@@ -45,7 +45,7 @@ class BasicResult(BaseResult):
     """
 
 
-class BasicRoughResult(BasicResult):
+class BasicRoughResult(BaseRoughResult):
     """
     Result class for the basic XEFI model with roughness, inheriting from BaseResult.
 
@@ -58,9 +58,9 @@ class BasicRoughResult(BasicResult):
     """
 
     def __init__(self):
+        # Call the parent constructor
+        super().__init__()
         # Declare the properties
-        self.z_roughness: npt.NDArray[np.floating] | None = None
-        """The roughness of the (N) interfaces in Angstroms (Å)."""
         self.rough_S: npt.NDArray[np.complex128] | None = None
         """Roughness reflection factor for each energy, angle and interface (L, M, N)"""
         self.rough_T: npt.NDArray[np.complex128] | None = None
@@ -69,20 +69,17 @@ class BasicRoughResult(BasicResult):
         """The Fresnel reflection coefficients with roughness for each energy, angle and interface (L, M, N)"""
         self.fresnel_t_rough: npt.NDArray[np.complex128] | None = None
         """The Fresnel transmission coefficients with roughness for each energy, angle and interface (L, M, N)"""
-        # Call the parent constructor
-        super().__init__()
-
-    def reset(self):
+        
+    def reset(self) -> None:
         """
         Clear/initialise the result object attributes to None.
         """
-        self.z_roughness = None
+        # Reset the parent properties
+        super().reset()
         self.rough_S = None
         self.rough_T = None
         self.fresnel_r_rough = None
         self.fresnel_t_rough = None
-        # Reset the parent properties
-        super().reset()
 
 def XEF(
     energies: list[float] | npt.NDArray[np.floating] | float,
@@ -96,10 +93,8 @@ def XEF(
     ),
     z_roughness: list[float] | npt.NDArray[np.floating] | None = None,
     *,
-    method: XEF_method | str = XEF_method.tolan,
+    method: XEF_method | str = XEF_method.dev,
     layer_names: list[str] | None = None,
-    input_checking: bool = True,
-    generate_figure: bool = False,
 ) -> BasicResult | BasicRoughResult:
     """
     Calculate the complex X-ray Electric Field for a set of layers.
@@ -121,10 +116,6 @@ def XEF(
         If None, no roughness is applied, by default None.
     layer_names : list[str] | None, optional
         The names of the layers corresponding to the refractive indices, by default None.
-    input_checking : bool, optional
-        Whether to perform input checking, by default True.
-    generate_figure : bool, optional
-        Whether to generate a figure of the XEFI, by default False.
 
     Returns
     -------
@@ -332,22 +323,6 @@ def XEF(
             - (np.cos(theta[np.newaxis, :, np.newaxis]) ** 2)
         )
     )
-    
-    for i in range(N+1):
-        print(f"wave layer {i}\t", wavevectors[:, 5, i])
-    
-    # Small angle approximation for cosine:
-    # wavevectors[:, :, 1:] = k0[:, np.newaxis, np.newaxis] * angles_of_incidence[:, :, 1:]
-
-    fig, ax = plt.subplots(2, 1, sharex=True)
-    for i in range(L):
-        for j in range(N+1):
-            ax[0].plot(angles, wavevectors[i, :, j].real, label=f"Layer {j}")
-            ax[1].plot(angles, wavevectors[i, :, j].imag, label=f"Layer {j}")
-    ax[0].set_ylabel("Wavevector Re")
-    ax[1].set_ylabel("Wavevector Im")
-    ax[1].set_xlabel("Angle (degrees)")
-
     result.wavevectors = wavevectors
     result.angles_of_incidence = angles_of_incidence
 
@@ -366,20 +341,6 @@ def XEF(
     # )
     result.fresnel_r = fresnel_r
     result.fresnel_t = fresnel_t
-    
-    fig,ax = plt.subplots(2,1, sharex=True)
-    for l in range(L):
-        for i in range(N):
-            ax[0].plot(angles, fresnel_r[l, :, i].real, label="Fr R (Re) " + layer_names[i+1])
-            ax[1].plot(angles, fresnel_r[l, :, i].imag, label="Fr R (Im) " + layer_names[i+1])
-            ax[0].plot(angles, fresnel_t[l, :, i].real, label="Fr T (Re) " + layer_names[i+1])
-            ax[1].plot(angles, fresnel_t[l, :, i].imag, label="Fr T (Im) " + layer_names[i+1])
-    ax[1].set_xlabel("Angle (degrees)")
-    ax[0].set_ylabel("Fresnel Coefficients (Re)")
-    ax[1].set_ylabel("Fresnel Coefficients (Im)")
-    ax[0].legend()
-    ax[1].legend()
-    plt.show()
 
     # Calculate the critical angles
     critical_angles: npt.NDArray[np.floating] = np.sqrt(2 * (1 - ref_idxs[:, 1:].real))
@@ -458,51 +419,6 @@ def XEF(
             )
         case _:
             raise NotImplementedError(f"Method {method} not yet implemented.")
-
-    if X is not None:
-        fig,ax = plt.subplots(3,1, sharex=True, figsize=(10,12)) 
-    else:
-        fig,ax = plt.subplots(2,1, sharex=True, figsize=(10,8)) 
-    axin1 = ax[0].inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
-    axin2 = ax[1].inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
-    if X is not None:
-        axin3 = ax[2].inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
-    if L == 1:
-        for i in range(N+1):
-            ax[0].plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
-            ax[1].plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
-            if X is not None:
-                ax[2].plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
-            axin1.plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
-            axin2.plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
-            if X is not None:
-                axin3.plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
-    ax[0].plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
-    ax[0].plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray', alpha=0.7)
-    axin1.plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
-    axin1.plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray', alpha=0.7)
-
-    axins = [axin1, axin2] + ([axin3] if X is not None else [])
-    for axin in axins:
-        axin.set_xlim(np.rad2deg(np.min(critical_angles[:, :])) - 0.02, np.rad2deg(np.max(critical_angles[:, :])) + 0.02)
-
-    
-    for l in range(len(ax)):
-        if L == 1:
-            for i in range(N):
-                    # Add vertical line
-                    ax[l].axvline(x=np.rad2deg(critical_angles[0, i]), color='k', linestyle='--', linewidth=0.5, alpha=0.2)
-                    ax[l].set_ylim(1e-4, 5.0)
-        ax[l].set_yscale("log")    
-        if np.max(axins[l].get_ylim()) > 10:
-            axins[l].set_ylim(np.min(axins[l].get_ylim()), 1e1)
-    ax[-1].set_xlabel("Angle (degrees)")
-    ax[0].set_ylabel("Reflectance")
-    ax[1].set_ylabel("Transmittance")
-    if X is not None:
-        ax[2].set_ylabel("Field Strength")
-    ax[0].legend()
-    fig.suptitle(f"XEFI Calculation using {method.value} method")
 
     # Finishing up - reduce dimensions if L or M is 1.
     if X is not None:
@@ -640,37 +556,49 @@ def XEF_Parratt_Tolan(
     The electric field amplitude of the reflected propagating wave.
     """
     # Tolan defines z values less than 0.
+    # Tolan also defines j=1=Air, with N interfaces, where j_N+1 = Substrate
+    # Therefore X1 is the total reflectivity of the surface in air. 
 
     # From the layer before the substrate
-    for i in range(N-1, -1, -1): # i=interface
-        partial = X[:, :, i+1] * np.exp(2j * wavevectors[:, :, i+1] * z[i])
+    for i in range(N-1, -1, -1): 
+        phase = 2j * wavevectors[:, :, i+1] * z[i]
+        partial = X[:, :, i+1] * np.exp(phase)
         X[:, :, i] = np.exp(-2j * wavevectors[:, :, i] * z[i]) * (
             (fresnel_r[:, :, i] + partial) 
-            / (1 + fresnel_r[:, :, i] * partial)
+            / (1 + fresnel_r[:, :, i] * partial) # Equation 2.16
         )
-        
+
+        print(f"Layer {i}: X = {X[:,5,i]}, \t \n\t fresnel_r = {fresnel_r[:,5,i]} \t \n\twave = {wavevectors[:, 5, i+1]}")
+
     # Set the top layer Reflection equal to the raio as T[:,:,0] = 1.
-    T[:,:,0] = 1
-    R[:,:,0] = X[:,:,0]
+    T[:,:,0] = 1 # T1 condition
+    R[:,:,0] = X[:,:,0] # Equation 2.18 - X1,R1 condition
     
     for i in range(0, N): # i=interface
         wv_diff = wavevectors[:, :, i+1] - wavevectors[:, :, i]
         wv_add = wavevectors[:, :, i+1] + wavevectors[:, :, i]
+        phase1 = 1j * (wv_add) * z[i]
+        phase2 = 1j * (wv_diff) * z[i]
         
-        if i < N-1: # no reflection from the substrate.
+        if i+1 < N: # no reflection from the substrate.
             R[:,:,i+1] = (
                 1/(fresnel_t[:, :, i]) * (
-                    T[:,:,i] * fresnel_r[:,:,i] * np.exp(1j * (wv_add) * z[i])
-                    + R[:,:,i] * np.exp(1j * (wv_diff) * z[i])
-                )
+                    T[:,:,i] * fresnel_r[:,:,i] * np.exp(phase1)
+                    + R[:,:,i] * np.exp(phase2)
+                ) # Equation 2.19
             ) 
         
         T[:,:,i+1] = (
             1/(fresnel_t[:, :, i]) * (
-                T[:,:,i] * np.exp(-1j * (wv_diff) * z[i])
-                + R[:,:,i] * fresnel_r[:,:,i] * np.exp(-1j * (wv_add) * z[i])
-            )
+                T[:,:,i] * np.exp(-phase2)
+                + R[:,:,i] * fresnel_r[:,:,i] * np.exp(-phase1)
+            ) # Equation 2.20
         )
+        
+    for i in range(N+1):
+        print(f"Layer {i}: T = {T[:,5,i]}, \t \n\t fresnel_t = {fresnel_t[:,5,j]} \t ")
+        print(f"Layer {i}: R = {R[:,5,i]}, \t \n\t fresnel_r = {fresnel_r[:,5,j]} \t ")
+        
         
     return T, R, X
 
@@ -749,8 +677,6 @@ def XEF_Parratt_Dev(
             / (1 + (a_jp1 ** 2) * X[:, :, j + 1] * fresnel_r[:, :, j]) # Dev Eq 11
         ) if j != N-1 else fresnel_r[:, :, j]
 
-        print(f"Layer {j}: X = {X[:,5,j]}, \t a_jp1 = {a_jp1[:,5]}, \n\t fresnel_r = {fresnel_r[:,5,j]} \t djp1 = {d_jp1}\n\twave = {wavevectors[:, 5, j+1]}")
-
     R: npt.NDArray[np.complexfloating] = np.zeros((L, M, N+1), dtype=np.complex128)
     """The electric field amplitude of the reflected propagating wave."""
     T: npt.NDArray[np.complexfloating] = np.zeros((L, M, N+1), dtype=np.complex128)
@@ -758,8 +684,6 @@ def XEF_Parratt_Dev(
 
     R[:,:,0] = X[:,:,0] # already normalized transmission to one.
     T[:,:,0] = 1.0 # Incident field normalized to one.
-    
-    print("------")
     
     for j in range(0, N):
         # To calculate R and T, we need X_j+1, X_j, a_j, a_j+1, r_j, d_j, d_j+1
@@ -790,96 +714,95 @@ def XEF_Parratt_Dev(
             / (1 + a_jp1 **2 * X[:, :, j+1] * fresnel_r[:, :, j]) # Dev Eq 10
         )
         
-        print(f"Layer {j}: T = {T[:,5,j]}, \t a_jp1 = {a_jp1[:,5]},\n\t fresnel_t = {fresnel_t[:,5,j]} \t djp1 = {d_jp1}")
-        print(f"Layer {j}: R = {R[:,5,j]}, \t a_jp1 = {a_jp1[:,5]},\n\t fresnel_r = {fresnel_r[:,5,j]} \t djp1 = {d_jp1}")
-        
     return T, R, X
  
-def XEF_Parratt(
-    result: BasicResult | BasicRoughResult,
-    L : int,
-    M : int,
-    N : int,
-    wavevectors: npt.NDArray[np.complexfloating],
-    fresnel_r: npt.NDArray[np.complexfloating],
-    fresnel_t: npt.NDArray[np.complexfloating],
-    z: npt.NDArray[np.float64],
-) -> tuple[npt.NDArray[np.complexfloating], npt.NDArray[np.complexfloating]]:
-    """
-    Use the Parratt formalism for calculating the reflection and transmission coefficients.
-    """
-    raise NotImplementedError("Parratt method not yet implemented.")
-    
-    # X = np.zeros((L, M, N + 1), dtype=np.complex128)
-    
-    # for i in range(N-1, -1, -1):
-    #     assert i > 0 and i < N, "a_i only defined for layers with thickness."
-    #     #  Inbetween eq 3 and 4:
-    #     f_i_crit_diff = (angles_of_incidence[:,:,i]**2 - critical_angles[:, i-1]**2)
-    #     f_i_beta = ref_idxs[:, i].imag
-    #     f_a_i = (f_i_crit_diff**2 + 4 * f_i_beta**2)**0.5
-    #     f_b_i = (f_i_crit_diff)
-    #     f_A_i = np.sqrt(2) * (f_a_i + f_b_i)
-    #     f_B_i = np.sqrt(2) * (f_a_i - f_b_i)
-    #     f_i = f_A_i - 1j * f_B_i
-    #     # j = i + 1
-    #     j = i + 1
-    #     f_j_crit_diff = (angles_of_incidence[:,:,j]**2 - critical_angles[:, j-1]**2)
-    #     f_j_beta = ref_idxs[:, j].imag
-    #     f_a_j = (f_j_crit_diff**2 + 4 * f_j_beta**2)**0.5
-    #     f_b_j = (f_j_crit_diff)
-    #     f_A_j = np.sqrt(2) * (f_a_j + f_b_j)
-    #     f_B_j = np.sqrt(2) * (f_a_j - f_b_j)
-    #     f_j = f_A_j - 1j * f_B_j
-        
-    #     # Equation 7: Phase accumulation halfway within layer i
-    #     a_i_2 = np.exp(-1j * wavevectors[:, :, i] * f_i * abs(z[i] - z[i+1])) # squared a_i in Parratt Formalism
-    #     a_j_2 = np.exp(-1j * wavevectors[:, :, j] * f_j * abs(z[j] - z[j+1])) # squared a_i in Parratt Formalism
-    #     # Equation 8:
-    #     F_i_j = (f_i - f_j) / (f_i + f_j)
-    #     X[:, :, i] = a_i_2 ** 2 * (X[:,:,i+1] + F_i_j) / (X[:,:,i+1] * F_i_j + 1)
-
-
-    # R = np.zeros((L, M, N + 1), dtype=np.complex128)
-    # T = np.zeros((L, M, N + 1), dtype=np.complex128)
-    # T[:,:,0] = 1  # already normalized transmission to one.
-    # R[:,:,0] = X[:,:,0] # already normalized transmission to one.
-    # for i in range(0, N):
-    #     # PARRATT - X values are determined midway through mediums.
-    #     #  Inbetween eq 3 and 4:
-    #     f_i_crit_diff = (angles_of_incidence[:,:,i]**2 - critical_angles[:, i-1]**2)
-    #     f_i_beta = ref_idxs[:, i].imag
-    #     f_a_i = (f_i_crit_diff**2 + 4 * f_i_beta**2)**0.5
-    #     f_b_i = (f_i_crit_diff)
-    #     f_A_i = np.sqrt(2) * (f_a_i + f_b_i)
-    #     f_B_i = np.sqrt(2) * (f_a_i - f_b_i)
-    #     f_i = f_A_i - 1j * f_B_i
-    #     # j = i + 1
-    #     j = i + 1
-    #     f_j_crit_diff = (angles_of_incidence[:,:,j]**2 - critical_angles[:, j-1]**2)
-    #     f_j_beta = ref_idxs[:, j].imag
-    #     f_a_j = (f_j_crit_diff**2 + 4 * f_j_beta**2)**0.5
-    #     f_b_j = (f_j_crit_diff)
-    #     f_A_j = np.sqrt(2) * (f_a_j + f_b_j)
-    #     f_B_j = np.sqrt(2) * (f_a_j - f_b_j)
-    #     f_j = f_A_j - 1j * f_B_j
-        
-    #     # Equation 7: Phase accumulation halfway within layer i
-    #     a_i_2 = np.exp(-1j * wavevectors[:, :, i] * f_i * abs(z[i] - z[i+1])) # squared a_i in Parratt Formalism
-    #     a_j_2 = np.exp(-1j * wavevectors[:, :, j] * f_j * abs(z[j] - z[j+1])) # squared a_i in Parratt Formalism
-        
-    #     # Calculate propogating:
-    #     # # Rearrange equation 8
-    #     # Xi = (F_{i-1} a_{i-1}^4 - X_{i-1}) / (X_{i-1} F_{i-1} - a_{i-1}^4)
-    #     # Use transmission equation:
-    #     # E_transmission_i = a_i E_reflection_i * X[i]
-    #     # Together
-    #     # 
-    #     # T[:, :, i] = 
-
-
 registered_methods = {
     XEF_method.ohta: XEF_Abeles_Ohta,
     XEF_method.tolan: XEF_Parratt_Tolan,
     XEF_method.dev: XEF_Parratt_Dev
 }
+ 
+ 
+# def XEF_Parratt(
+#     result: BasicResult | BasicRoughResult,
+#     L : int,
+#     M : int,
+#     N : int,
+#     wavevectors: npt.NDArray[np.complexfloating],
+#     fresnel_r: npt.NDArray[np.complexfloating],
+#     fresnel_t: npt.NDArray[np.complexfloating],
+#     z: npt.NDArray[np.float64],
+# ) -> tuple[npt.NDArray[np.complexfloating], npt.NDArray[np.complexfloating]]:
+#     """
+#     Use the original Parratt formalism for calculating the reflection and transmission coefficients.
+#     I think Parratt only calculates the X and R0 value.
+#     """
+#     raise NotImplementedError("Parratt method not yet implemented.")
+    
+#     X = np.zeros((L, M, N + 1), dtype=np.complex128)
+    
+#     for i in range(N-1, -1, -1):
+#         assert i > 0 and i < N, "a_i only defined for layers with thickness."
+#         #  Inbetween eq 3 and 4:
+#         f_i_crit_diff = (angles_of_incidence[:,:,i]**2 - critical_angles[:, i-1]**2)
+#         f_i_beta = ref_idxs[:, i].imag
+#         f_a_i = (f_i_crit_diff**2 + 4 * f_i_beta**2)**0.5
+#         f_b_i = (f_i_crit_diff)
+#         f_A_i = np.sqrt(2) * (f_a_i + f_b_i)
+#         f_B_i = np.sqrt(2) * (f_a_i - f_b_i)
+#         f_i = f_A_i - 1j * f_B_i
+#         # j = i + 1
+#         j = i + 1
+#         f_j_crit_diff = (angles_of_incidence[:,:,j]**2 - critical_angles[:, j-1]**2)
+#         f_j_beta = ref_idxs[:, j].imag
+#         f_a_j = (f_j_crit_diff**2 + 4 * f_j_beta**2)**0.5
+#         f_b_j = (f_j_crit_diff)
+#         f_A_j = np.sqrt(2) * (f_a_j + f_b_j)
+#         f_B_j = np.sqrt(2) * (f_a_j - f_b_j)
+#         f_j = f_A_j - 1j * f_B_j
+        
+#         # Equation 7: Phase accumulation halfway within layer i
+#         a_i_2 = np.exp(-1j * wavevectors[:, :, i] * f_i * abs(z[i] - z[i+1])) # squared a_i in Parratt Formalism
+#         a_j_2 = np.exp(-1j * wavevectors[:, :, j] * f_j * abs(z[j] - z[j+1])) # squared a_i in Parratt Formalism
+#         # Equation 8:
+#         F_i_j = (f_i - f_j) / (f_i + f_j)
+#         X[:, :, i] = a_i_2 ** 2 * (X[:,:,i+1] + F_i_j) / (X[:,:,i+1] * F_i_j + 1)
+
+
+#     R = np.zeros((L, M, N + 1), dtype=np.complex128)
+#     T = np.zeros((L, M, N + 1), dtype=np.complex128)
+#     T[:,:,0] = 1  # already normalized transmission to one.
+#     R[:,:,0] = X[:,:,0] # already normalized transmission to one.
+#     for i in range(0, N):
+#         # PARRATT - X values are determined midway through mediums.
+#         #  Inbetween eq 3 and 4:
+#         f_i_crit_diff = (angles_of_incidence[:,:,i]**2 - critical_angles[:, i-1]**2)
+#         f_i_beta = ref_idxs[:, i].imag
+#         f_a_i = (f_i_crit_diff**2 + 4 * f_i_beta**2)**0.5
+#         f_b_i = (f_i_crit_diff)
+#         f_A_i = np.sqrt(2) * (f_a_i + f_b_i)
+#         f_B_i = np.sqrt(2) * (f_a_i - f_b_i)
+#         f_i = f_A_i - 1j * f_B_i
+#         # j = i + 1
+#         j = i + 1
+#         f_j_crit_diff = (angles_of_incidence[:,:,j]**2 - critical_angles[:, j-1]**2)
+#         f_j_beta = ref_idxs[:, j].imag
+#         f_a_j = (f_j_crit_diff**2 + 4 * f_j_beta**2)**0.5
+#         f_b_j = (f_j_crit_diff)
+#         f_A_j = np.sqrt(2) * (f_a_j + f_b_j)
+#         f_B_j = np.sqrt(2) * (f_a_j - f_b_j)
+#         f_j = f_A_j - 1j * f_B_j
+        
+#         # Equation 7: Phase accumulation halfway within layer i
+#         a_i_2 = np.exp(-1j * wavevectors[:, :, i] * f_i * abs(z[i] - z[i+1])) # squared a_i in Parratt Formalism
+#         a_j_2 = np.exp(-1j * wavevectors[:, :, j] * f_j * abs(z[j] - z[j+1])) # squared a_i in Parratt Formalism
+        
+#         # Calculate propogating:
+#         # # Rearrange equation 8
+#         # Xi = (F_{i-1} a_{i-1}^4 - X_{i-1}) / (X_{i-1} F_{i-1} - a_{i-1}^4)
+#         # Use transmission equation:
+#         # E_transmission_i = a_i E_reflection_i * X[i]
+#         # Together
+#         # 
+#         # T[:, :, i] = 
+

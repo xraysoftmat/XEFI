@@ -18,3 +18,5 @@ class SlicedResult(BaseResult):
     Attributes
     ----------
     """
+    
+    

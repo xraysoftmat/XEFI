@@ -1,15 +1,29 @@
 """
 A module for basic result handling in XEFI.
 """
-
-import numpy as np, numpy.typing as npt
-import matplotlib.pyplot as plt, matplotlib.colors 
-from matplotlib.figure import Figure, SubFigure
-from matplotlib.axes import Axes
-from matplotlib.colors import Colormap, LogNorm, Normalize
-from typing import Literal, TypeVar
+from typing import Literal, TypeVar, override
 from abc import ABCMeta
 from enum import Enum
+
+from matplotlib.cm import get_cmap
+from numpy._typing import NDArray
+import numpy as np, numpy.typing as npt
+try:
+    import matplotlib.pyplot as plt, matplotlib.colors 
+    from matplotlib.figure import Figure as mplFig, SubFigure as mplSubFig
+    from matplotlib.axes import Axes as mplAxes
+    from matplotlib.colors import Colormap, LogNorm, Normalize
+    has_mpl = True
+except ImportError:
+    has_mpl = False
+
+try:
+    import plotly.express as px
+    from plotly.graph_objects import Figure as pxFig    
+    has_plotly = True
+except ImportError:
+    has_plotly = False
+    
 # import scipy.constants as sc 
 
 T = TypeVar("T", bound=np.float64)
@@ -103,7 +117,7 @@ class BaseResult(metaclass=ABCMeta):
         """The complex reflection amplitude, for each energy, angle and interface (L, M, N)."""
         self.X: npt.NDArray[np.complexfloating] | None
         """The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, N)."""
-        self.fig: Figure | SubFigure | None
+        self.fig: mplFig | mplSubFig | None
         """The matplotlib figure for plotted results."""
         self.layer_names: list[str] | None
         """The names of the layers (N+1), if provided."""
@@ -166,7 +180,6 @@ class BaseResult(metaclass=ABCMeta):
         self.fresnel_r = None
         self.fresnel_t = None
         self.layer_names = None
-        return
 
     def electric_field(self, z_vals: npt.ArrayLike) -> npt.NDArray[np.complexfloating]:
         """
@@ -236,7 +249,9 @@ class BaseResult(metaclass=ABCMeta):
             assert L == 1 or M == 1
             
             T = self.T.copy()
+            print("T", T.shape)
             R = self.R.copy()
+            print("R", R.shape)
 
             # if self.method == XEF_method.dev:
             #     # Invert complex sign
@@ -266,15 +281,6 @@ class BaseResult(metaclass=ABCMeta):
                     R[:, i, np.newaxis] 
                     * np.exp(-phase)
                 ) if i < N else np.zeros((len(wvs), len(d)))
-                
-                
-                print("i: ", i,
-                    "\nTransmission:", transmission[:,-1],
-                    "\nReflection:", reflection[:,-1], 
-                    "\nWave:",  wvs[:],
-                    "\nd:", d[::20],
-                    "\nPhase:", phase
-                    )
                 
                 E_total[:, :, subset] = transmission + reflection
 
@@ -335,18 +341,18 @@ class BaseResult(metaclass=ABCMeta):
     def generate_pretty_figure_XEFI(
         self,
         z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
-        fig: Figure | SubFigure | None = None,
-        ax: Axes | None = None,
+        fig: mplFig | mplSubFig | None = None,
+        ax: mplAxes | None = None,
         cbar_loc: Literal["fig", "ax"] = "fig",
         cmap: Colormap = plt.cm.get_cmap("viridis"),
         norm: Literal["linear", "log"] | Normalize = "linear",
         m: int | None = None,
         l: int | None = None,
+        labels: list[str] | None = None,
         grid_z: bool = True,
         grid_labels : bool = True,
         grid_crit: bool = True,
-        labels: list[str] | None = None,
-    ) -> tuple[Figure | SubFigure, Axes]:
+    ) -> tuple[mplFig | mplSubFig, mplAxes]:
         """
         Generate a pretty 2D plot of the X-ray electric field intensity as a function of depth.
 
@@ -376,14 +382,14 @@ class BaseResult(metaclass=ABCMeta):
             A singular index to consider for the angles of incidence. Defaults to None.
         l : int | None, optional
             A singular index to consider for the beam energies. Defaults to None.
-        grid_z : bool
-            Whether to plot the layer grid. Defaults to True.
-        grid_crit : float
-            Whether to plot the critical angles grid. Defaults to True.
-        grid_z_labels : bool
-            Whether to plot the z layer labels. Defaults to True.
-        labels : list[str] | None
+        labels : list[str] | None, optional
             The labels for the z layers. If None, defaults to automatic labels.
+        grid_z : bool, optional
+            Whether to plot the layer grid. Defaults to True.
+        grid_labels : bool, optional
+            Whether to plot the z layer labels. Defaults to True.
+        grid_crit : float, optional
+            Whether to plot the critical angles grid. Defaults to True.
 
         Returns
         -------
@@ -536,15 +542,14 @@ class BaseResult(metaclass=ABCMeta):
                     ax.text(x=ang, y=0.00, s=name, 
                             transform=ax.get_xaxis_transform(), 
                             color="white", ha='center')
-                    
         return fig, ax
 
     def generate_pretty_figure_XEFI_intensity(
         self,
         z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
-        fig: Figure | SubFigure | None = None,
-        ax: Axes | None = None,
-    ) -> tuple[Figure | SubFigure, Axes]:
+        fig: mplFig | mplSubFig | None = None,
+        ax: mplAxes | None = None,
+    ) -> tuple[mplFig | mplSubFig, mplAxes]:
         """
         Generate a pretty plot of the summed XEFI intensity within each layer.
 
@@ -570,9 +575,9 @@ class BaseResult(metaclass=ABCMeta):
     def generate_pretty_figure(
         self,
         z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
-        fig: Figure | SubFigure | None = None,
-        ax: Axes | None = None,
-    ) -> tuple[Figure | SubFigure, Axes]:
+        fig: mplFig | mplSubFig | None = None,
+        ax: mplAxes | None = None,
+    ) -> tuple[mplFig | mplSubFig, mplAxes]:
         """
         Generate a pretty plot of the XEFI intensity, and the summed XEFI intensity within each layer.
 
@@ -596,3 +601,250 @@ class BaseResult(metaclass=ABCMeta):
             # fig is not None and ax is None
             assert fig is not None
             ax = fig.add_subplot(1, 1, 1)
+
+    def graph_wavevectors(
+        self,
+        ax_re: mplAxes | None = None,
+        ax_im: mplAxes | None = None,
+    ) -> tuple[mplAxes, mplAxes] | None:
+        """Plot the wavevectors for each layer as a function of angle/energy."""
+        L, M, N = self.L, self.M, self.N
+        # Create a graph
+        if ax_re is None and ax_im is None:
+            fig, (ax_re, ax_im) = plt.subplots(2, 1, sharex=True)
+            ax_re.set_ylabel("Wavevector Re")
+            ax_im.set_ylabel("Wavevector Im")
+            ax_im.set_xlabel("Angle (degrees)")
+        
+        for i in range(self.L):
+            for j in range(self.N+1):
+                if ax_re is not None:
+                    ax_re.plot(self.theta_deg, self.wavevectors[i, :, j].real, label=f"Layer {j}")
+                if ax_im is not None:
+                    ax_im.plot(self.theta_deg, self.wavevectors[i, :, j].imag, label=f"Layer {j}")
+        return ax_re, ax_im
+
+    def graph_fresnel(
+        self,
+        ax_re: mplAxes | None = None,
+        ax_im: mplAxes | None = None,
+    ) -> tuple[mplAxes, mplAxes] | None:
+        """Plot the Fresnel coefficients for each interface as a function of angle/energy."""
+        if ax_re is None and ax_im is None:
+            fig, (ax_re, ax_im) = plt.subplots(2, 1, sharex=True)
+            ax_im.set_xlabel("Angle (degrees)")
+            ax_re.set_ylabel("Fresnel Coefficients (Re)")
+            ax_im.set_ylabel("Fresnel Coefficients (Im)")
+
+        for l in range(L):
+            for i in range(N):
+                ax_re.plot(self.theta_deg, self.fresnel_r[l, :, i].real, label="Fr R (Re) " + self.layer_names[i+1])
+                ax_im.plot(self.theta_deg, self.fresnel_r[l, :, i].imag, label="Fr R (Im) " + self.layer_names[i+1])
+                ax_re.plot(self.theta_deg, self.fresnel_t[l, :, i].real, label="Fr T (Re) " + self.layer_names[i+1])
+                ax_im.plot(self.theta_deg, self.fresnel_t[l, :, i].imag, label="Fr T (Im) " + self.layer_names[i+1])
+        ax_re.legend()
+        ax_im.legend()
+
+        return ax_re, ax_im
+    
+    def graph_layer_EF_amplitude(
+        self,
+        ax_R: mplAxes | None = None,
+        ax_T: mplAxes | None = None,
+        ax_X: mplAxes | None = None,
+    ) -> tuple[mplAxes, mplAxes, mplAxes | None]:
+        """Plot the electric field amplitude solved within each layer."""
+        X, R, T = self.X, self.R, self.T
+        L, M, N = self.L, self.M, self.N
+        critical_angles = self.critical_angles
+        angles = self.theta_deg
+        fresnel_r = self.fresnel_r
+        
+        assert N is not None and N >= 2, "N (interfaces) must be >= 2"
+        assert angles is not None
+        assert fresnel_r is not None
+        
+        layer_names = self.layer_names
+        if layer_names is None:
+           layer_names = [f"Layer {i}" for i in range(N+1)]
+
+        if ax_R is None and ax_T is None and ax_X is None:
+            if X is not None:
+                fig,(ax_R, ax_T, ax_X) = plt.subplots(3,1, sharex=True, figsize=(10,12)) 
+                ax_X.set_ylabel("Reflected / Transmitted Field Ratio")
+            else:
+                fig,(ax_R, ax_T) = plt.subplots(2,1, sharex=True, figsize=(10,8)) 
+                
+            ax[-1].set_xlabel("Angle (degrees)")
+            ax_R.set_ylabel("Reflectance")
+            ax_T.set_ylabel("Transmittance")
+            fig.suptitle(f"XEFI Calculation using {self.method.value} method")
+
+        axin1 = ax_R.inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
+        axin2 = ax_T.inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
+        if X is not None:
+            axin3 = ax_X.inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
+        if L == 1:
+            for i in range(N+1):
+                ax_R.plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
+                ax_T.plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
+                if X is not None:
+                    ax_X.plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
+                axin1.plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
+                axin2.plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
+                if X is not None:
+                    axin3.plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
+        ax_R.plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
+        ax_R.plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray', alpha=0.7)
+        axin1.plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
+        axin1.plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray', alpha=0.7)
+
+        axins = [axin1, axin2] + ([axin3] if X is not None else [])
+        if critical_angles is not None:
+            for axin in axins:
+                axin.set_xlim(np.rad2deg(np.min(critical_angles[:, :])) - 0.02, np.rad2deg(np.max(critical_angles[:, :])) + 0.02)
+
+        
+            for l in range(len(ax)):
+                if L == 1:
+                    for i in range(N):
+                            # Add vertical line
+                            ax[l].axvline(x=np.rad2deg(critical_angles[0, i]), color='k', linestyle='--', linewidth=0.5, alpha=0.2)
+                            ax[l].set_ylim(1e-4, 5.0)
+            ax[l].set_yscale("log")    
+            if np.max(axins[l].get_ylim()) > 10:
+                axins[l].set_ylim(np.min(axins[l].get_ylim()), 1e1)
+        ax_R.legend()
+        
+        
+class BaseRoughResult(BaseResult, metaclass=ABCMeta):
+    """
+    An abstract base class for handling roughness results in XEFI.
+
+    Inherits from `BaseResult` and extends it with attributes and methods specific to roughness calculations.
+
+    Parameters
+    ----------
+    **kwargs : dict
+        Keyword arguments to initialize attributes of the class.
+
+    Attributes
+    ----------
+    sigma : npt.NDArray[np.floating] | None
+        The roughness values for each interface (N) in angstroms (Å).
+    roughness_profile : npt.NDArray[np.floating] | None
+        The roughness profile as a function of z-coordinate.
+    roughness_z : npt.NDArray[np.floating] | None
+        The z-coordinates corresponding to the roughness profile in angstroms (Å).
+    """
+
+    def __init__(self, **kwargs) -> None:
+        # Parent constructor.
+        super().__init__(**kwargs)
+        # Declare the properties
+        self.z_roughness: npt.NDArray[np.floating] | None = None
+        """The roughness of the (N) interfaces in Angstroms (Å)."""
+
+    @override
+    def reset(self) -> None:
+        """
+        Clear/initialise the result object attributes to None.
+        """
+        # Reset the parent properties
+        super().reset()
+        # Reset new properties
+        self.roughness_z = None
+        return
+    
+    @override
+    def generate_pretty_figure_XEFI(
+        self,
+        z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
+        fig: mplFig | mplSubFig | None = None,
+        ax: mplAxes | None = None,
+        cbar_loc: Literal["fig", "ax"] = "fig",
+        cmap: Colormap = plt.cm.get_cmap("viridis"),
+        norm: Literal["linear", "log"] | Normalize = "linear",
+        m: int | None = None,
+        l: int | None = None,
+        labels: list[str] | None = None,
+        grid_z: bool = True,
+        grid_labels : bool = True,
+        grid_crit: bool = True,
+        grid_roughness: bool = True,
+    ) -> tuple[mplFig | mplSubFig, mplAxes]:
+        """
+        Generate a pretty 2D plot of the X-ray electric field intensity as a function of depth.
+
+        The second dimension is either `theta` (angle of incidence) or `beam_energy`.
+        This dimension is automatically chosen if one of the dimensions is singular (i.e., has length 1).
+        Otherwise, the user must specify either `m` or `l` to choose a singular index.
+
+        Parameters
+        ----------
+        z_vals : npt.NDArray[np.floating] | list[float | int] | None, optional
+            The z-coordinates at which to calculate the electric field intensity, in angstroms (Å).
+            If None, uses the z-coordinates from the result object, with 10% padding.
+        fig : Figure | SubFigure | None, optional
+            The matplotlib figure to use for the plot. If None, a new figure is created.
+        ax : Axes | None, optional
+            The matplotlib axes to use for the plot. If None, a new axes is created.
+        cbar_loc : Literal["fig", "ax"], optional
+            The location of the colorbar. If "fig", the colorbar is padded to the right of the figure;
+            if "ax", it is padded to the right of the axes. Defaults to "fig".
+        cmap : Colormap, optional
+            The colormap to use for the plot. Defaults to matplotlib's "viridis".
+        norm : Literal["linear", "log"] | matplotlib.colors.Normalize, optional
+            The normalization to use for the colormap. If "linear", uses a linear normalization;
+            if "log", uses a logarithmic normalization. Defaults to "linear".
+            Can also provide a custom normalization object.
+        m : int | None, optional
+            A singular index to consider for the angles of incidence. Defaults to None.
+        l : int | None, optional
+            A singular index to consider for the beam energies. Defaults to None.
+        labels : list[str] | None, optional
+            The labels for the z layers. If None, defaults to automatic labels.
+        grid_z : bool, optional
+            Whether to plot the layer grid. Defaults to True.
+        grid_crit : float, optional
+            Whether to plot the critical angles grid. Defaults to True.
+        grid_labels : bool, optional
+            Whether to plot the z layer labels. Defaults to True.
+        grid_roughness : bool, optional
+            Whether to plot the roughness profile. Defaults to True.
+
+        Returns
+        -------
+        tuple[Figure | SubFigure, Axes]
+            A tuple containing the matplotlib figure and axes used for the plot.
+        """
+        fig, ax = super().generate_pretty_figure_XEFI(
+            z_vals=z_vals,
+            fig=fig,
+            ax=ax,
+            cbar_loc=cbar_loc,
+            cmap=cmap,
+            norm=norm,
+            m=m,
+            l=l,
+            labels=labels,
+            grid_z=grid_z,
+            grid_labels=grid_labels,
+            grid_crit=grid_crit
+        )
+        
+        # Add lines to display the roughness
+        if grid_roughness:
+            z = self.z
+            zr = self.z_roughness
+            for i, zi in enumerate(z):
+                ax.fill_between(
+                    x=self.theta_deg,
+                    y1 = zi - zr[i] / 2,
+                    y2 = zi + zr[i] / 2,
+                    alpha=0.2,
+                    hatch="/",
+                    color="white"
+                )
+                
+        return fig, ax
