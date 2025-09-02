@@ -1,41 +1,48 @@
 """
 A module for basic result handling in XEFI.
 """
+
 from typing import Literal, TypeVar, override
 from abc import ABCMeta
 from enum import Enum
+import warnings
 
-from matplotlib.cm import get_cmap
-from numpy._typing import NDArray
-import numpy as np, numpy.typing as npt
+import numpy as np
+import numpy.typing as npt
+
 try:
-    import matplotlib.pyplot as plt, matplotlib.colors 
+    import matplotlib.pyplot as plt
     from matplotlib.figure import Figure as mplFig, SubFigure as mplSubFig
     from matplotlib.axes import Axes as mplAxes
     from matplotlib.colors import Colormap, LogNorm, Normalize
+
     has_mpl = True
 except ImportError:
     has_mpl = False
 
 try:
-    import plotly.express as px
-    from plotly.graph_objects import Figure as pxFig    
+    import plotly.express as px  # noqa: F401
+    from plotly.graph_objects import Figure as pxFig  # noqa: F401
+
     has_plotly = True
 except ImportError:
     has_plotly = False
-    
-# import scipy.constants as sc 
+
+# import scipy.constants as sc
 
 T = TypeVar("T", bound=np.float64)
 """Type variable for floating intensity results."""
+
 
 class XEF_method(Enum):
     """
     An enumerate for the XEF calculation method.
     """
-    tolan = "tolan"
-    dev = "dev"
-    ohta = "ohta"
+
+    TOLAN = "tolan"  # https://doi.org/10.1007/bfb0112834
+    DEV = "dev"  # https://doi.org/10.1103/PhysRevB.61.8462
+    OHTA = "ohta"  # https://doi.org/10.1364/AO.29.001952
+
 
 class BaseResult(metaclass=ABCMeta):
     """
@@ -80,6 +87,8 @@ class BaseResult(metaclass=ABCMeta):
         The Fresnel reflection coefficients for each interface and angle (N, M).
     fresnel_t : npt.NDArray[np.complexfloating] | None
         The Fresnel transmission coefficients for each interface and angle (N, M).
+    method : XEF_method | None
+        The XEF calculation method used.
     layer_names : list[str] | None
         The names of the layers (N+1), if provided.
     """
@@ -117,12 +126,10 @@ class BaseResult(metaclass=ABCMeta):
         """The complex reflection amplitude, for each energy, angle and interface (L, M, N)."""
         self.X: npt.NDArray[np.complexfloating] | None
         """The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, N)."""
-        self.fig: mplFig | mplSubFig | None
-        """The matplotlib figure for plotted results."""
-        self.layer_names: list[str] | None
-        """The names of the layers (N+1), if provided."""
         self.method: XEF_method | None
         """The XEF calculation method used."""
+        self.layer_names: list[str] | None
+        """The names of the layers (N+1), if provided."""
 
         # Initialize all attributes to None
         self.reset()
@@ -180,6 +187,35 @@ class BaseResult(metaclass=ABCMeta):
         self.fresnel_r = None
         self.fresnel_t = None
         self.layer_names = None
+        self.R = None
+        self.T = None
+        self.X = None
+
+    def squeeze(self) -> None:
+        """
+        Reduce the dimensions of the result if L or M is 1.
+
+        All results are calculated over energy, angle and layer indexes.
+        Sometimes energies (L) or angles (M) may be singular, and can be squeezed.
+        """
+        if self.X is not None:
+            self.X = np.squeeze(self.X)[()]
+        if self.R is not None:
+            self.R = np.squeeze(self.R)[()]
+        if self.T is not None:
+            self.T = np.squeeze(self.T)[()]
+        if self.wavevectors is not None:
+            self.wavevectors = np.squeeze(self.wavevectors)[()]
+        if self.angles_of_incidence is not None:
+            self.angles_of_incidence = np.squeeze(self.angles_of_incidence)[()]
+        if self.fresnel_r is not None:
+            self.fresnel_r = np.squeeze(self.fresnel_r)[()]
+        if self.fresnel_t is not None:
+            self.fresnel_t = np.squeeze(self.fresnel_t)[()]
+        if self.refractive_indices is not None:
+            self.refractive_indices = np.squeeze(self.refractive_indices)[()]
+        if self.critical_angles is not None:
+            self.critical_angles = np.squeeze(self.critical_angles)[()]
 
     def electric_field(self, z_vals: npt.ArrayLike) -> npt.NDArray[np.complexfloating]:
         """
@@ -200,7 +236,7 @@ class BaseResult(metaclass=ABCMeta):
         """
         # Get the indexes
         L, M, N = self.L, self.M, self.N
-        
+
         # Check if required attributes are set
         if self.z is None:
             raise ValueError(
@@ -222,7 +258,7 @@ class BaseResult(metaclass=ABCMeta):
             raise ValueError(
                 "The wavevectors (self.wavevectors) must be set before calculating the electric field."
             )
-            
+
         if M is None:
             M = 1
         if L is None:
@@ -235,7 +271,7 @@ class BaseResult(metaclass=ABCMeta):
         z0 = self.z
         layer_idxs = np.digitize(z_vals, z0)
         # Initialize the electric field array
-        
+
         E_total = np.zeros((L, M, len(z_vals)), dtype=np.complex128)
 
         # Top of layer definitions
@@ -247,44 +283,45 @@ class BaseResult(metaclass=ABCMeta):
             raise NotImplementedError("Nope")
         else:
             assert L == 1 or M == 1
-            
+
             T = self.T.copy()
-            print("T", T.shape)
             R = self.R.copy()
-            print("R", R.shape)
 
             # if self.method == XEF_method.dev:
             #     # Invert complex sign
             #     T.imag *= -1
             #     R.imag *= -1
-            
+
             # # For each layer
-            for i in range(N+1):
-                j = i - 1 if i > 0 else 0 # Which interface to use for T/R. 
+            for i in range(N + 1):
                 # For each layer
                 subset = layer_idxs == i  # Get the indices for this layer
                 z_subset = z_vals[subset]  # Get the z values for this layer
-            
+
                 # Calculate the distance into the layer from the top of the layer.
-                d = z_subset - z0[i] # for semi-infinite i=0, we flip, for i=N, we use the last z value.
-            
+                d = (
+                    z_subset - z0[i]
+                )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
+
                 wvs = self.wavevectors[:, i].copy()
-                assert wvs.shape == (self.M,) or wvs.shape == (self.L,), f"Is: {wvs.shape}"
-                
+                assert wvs.shape == (self.M,) or wvs.shape == (self.L,), (
+                    f"Is: {wvs.shape}"
+                )
+
                 # wvs.imag[wvs.imag < 0] *= -1 # Invert complex sign of negatively calculated wavevectors.
                 phase = -1j * wvs[:, np.newaxis] * d[np.newaxis, :]
-                transmission = (
-                    T[:, i, np.newaxis]  # indx: angles, z values
-                    * np.exp(phase)
+                transmission = T[:, i, np.newaxis] * np.exp(  # indx: angles, z values
+                    phase
                 )
                 reflection = (
-                    R[:, i, np.newaxis] 
-                    * np.exp(-phase)
-                ) if i < N else np.zeros((len(wvs), len(d)))
-                
+                    (R[:, i, np.newaxis] * np.exp(-phase))
+                    if i < N
+                    else np.zeros((len(wvs), len(d)))
+                )
+
                 E_total[:, :, subset] = transmission + reflection
 
-            return np.squeeze(E_total) # Remove excess dimensions.
+            return np.squeeze(E_total)  # Remove excess dimensions.
 
     def electric_field_intensity(
         self, z_vals: npt.ArrayLike
@@ -310,12 +347,12 @@ class BaseResult(metaclass=ABCMeta):
         """
         field = self.electric_field(z_vals)
         intensity = (field * np.conj(field)).real
-        print(intensity.shape)
-        print(intensity[:, 500])
         return intensity
-    
-    __call__ = electric_field_intensity # is this sufficient for documentation? probably not.
-    
+
+    __call__ = (
+        electric_field_intensity  # is this sufficient for documentation? probably not.
+    )
+
     # def __call__(self, z_vals: npt.ArrayLike) -> npt.NDArray[np.floating]:
     #     """
     #     Calculate the total electric field intensity at given z-coordinates.
@@ -344,14 +381,15 @@ class BaseResult(metaclass=ABCMeta):
         fig: mplFig | mplSubFig | None = None,
         ax: mplAxes | None = None,
         cbar_loc: Literal["fig", "ax"] = "fig",
-        cmap: Colormap = plt.cm.get_cmap("viridis"),
+        cmap: Colormap = plt.get_cmap("viridis"),
         norm: Literal["linear", "log"] | Normalize = "linear",
-        m: int | None = None,
-        l: int | None = None,
+        m_index: int | None = None,
+        l_index: int | None = None,
         labels: list[str] | None = None,
         grid_z: bool = True,
-        grid_labels : bool = True,
+        grid_labels: bool = True,
         grid_crit: bool = True,
+        angles_in_deg: bool = True,
     ) -> tuple[mplFig | mplSubFig, mplAxes]:
         """
         Generate a pretty 2D plot of the X-ray electric field intensity as a function of depth.
@@ -378,9 +416,9 @@ class BaseResult(metaclass=ABCMeta):
             The normalization to use for the colormap. If "linear", uses a linear normalization;
             if "log", uses a logarithmic normalization. Defaults to "linear".
             Can also provide a custom normalization object.
-        m : int | None, optional
+        m_index : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
-        l : int | None, optional
+        l_index : int | None, optional
             A singular index to consider for the beam energies. Defaults to None.
         labels : list[str] | None, optional
             The labels for the z layers. If None, defaults to automatic labels.
@@ -390,6 +428,8 @@ class BaseResult(metaclass=ABCMeta):
             Whether to plot the z layer labels. Defaults to True.
         grid_crit : float, optional
             Whether to plot the critical angles grid. Defaults to True.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
 
         Returns
         -------
@@ -412,27 +452,27 @@ class BaseResult(metaclass=ABCMeta):
         theta = self.theta
         energy = self.energies
         critical_angles = self.critical_angles
-        if critical_angles is not None:        
+        if critical_angles is not None:
             critical_angles = np.rad2deg(critical_angles)
         if L is not None and L > 1 and M is not None and M > 1:
             assert isinstance(theta, np.ndarray)
             assert isinstance(energy, np.ndarray)
-            if m is not None and l is not None:
+            if m_index is not None and l_index is not None:
                 raise ValueError(
                     "Values for both `l` and `m` are incompatible, as data is required to be 2D."
                 )
-            elif m is not None:
-                theta = theta[m]
+            elif m_index is not None:
+                theta = theta[m_index]
                 x_data = energy
                 x_selection = "energy"
                 M = 1  # Reduce M to 1 for plotting
-            elif l is not None:
-                energy = energy[l]
+            elif l_index is not None:
+                energy = energy[l_index]
                 x_data = theta
                 x_selection = "theta"
                 L = 1  # Reduce L to 1 for plotting
                 if critical_angles:
-                    critical_angles = critical_angles[l]
+                    critical_angles = critical_angles[l_index]
             else:
                 raise ValueError(
                     "This method is designed for 2D plotting. Ensure that either L or M are singular, \
@@ -451,16 +491,16 @@ class BaseResult(metaclass=ABCMeta):
                 "This method is designed for 2D plotting. Ensure that either L or M are singular, \
                 or choose a singular index using `l` or `m` function parameters."
             )
-            
-        if x_selection == "theta":
+
+        if x_selection == "theta" and angles_in_deg:
             # Convert to degrees
             x_data = np.rad2deg(x_data)
 
         plot_z: npt.NDArray[np.float64]
         z = self.z
-        assert (
-            z is not None and N is not None and len(z) == N
-        ), "Interface z-coordinates (self.z) must be set before generating the figure."
+        assert z is not None and N is not None and len(z) == N, (
+            "Interface z-coordinates (self.z) must be set before generating the figure."
+        )
         if z_vals is None:
             # Create a linspace of the z-coordinates with 10% padding
             width = abs(z[-1] - z[0])
@@ -481,16 +521,14 @@ class BaseResult(metaclass=ABCMeta):
         if norm == "linear":
             norm_fn = Normalize(vmin=intensity.min(), vmax=intensity.max())
         elif norm == "log":
-            norm_fn = LogNorm(
-                vmin=intensity[intensity > 0].min(), vmax=intensity.max()
-            )
+            norm_fn = LogNorm(vmin=intensity[intensity > 0].min(), vmax=intensity.max())
         elif isinstance(norm, Normalize) or issubclass(norm, Normalize):
             norm_fn = norm
         else:
             raise ValueError("`norm` must be either 'linear' or 'log'.")
 
         # Display the colormesh
-        pixmap = ax.pcolormesh(
+        ax.pcolormesh(
             x_data,
             plot_z,
             intensity.T,
@@ -501,47 +539,80 @@ class BaseResult(metaclass=ABCMeta):
         )
 
         # Finishing up
-        ax.set_xlabel("Angle of Incidence (degrees)" if x_selection == "theta" else "Energy (eV)")
+        ax.set_xlabel(
+            f"Angle of Incidence ({'degrees' if angles_in_deg else 'radians'})"
+            if x_selection == "theta"
+            else "Energy (eV)"
+        )
         ax.set_ylabel("$z$ (Å)")
         ax.set_title("X-ray Electric Field Intensity")
 
         # Add a colorbar
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm_fn)
         if cbar_loc == "fig":
-            cbar = fig.colorbar(
-                sm, ax=fig.axes, label="Electric Field Intensity (A.U.)"
-            )
+            fig.colorbar(sm, ax=fig.axes, label="Electric Field Intensity (A.U.)")
         elif cbar_loc == "ax":
-            cbar = fig.colorbar(sm, cax=ax, label="Electric Field Intensity (A.U.)")
+            fig.colorbar(sm, cax=ax, label="Electric Field Intensity (A.U.)")
         else:
             raise ValueError("`cbar_loc` must be either 'fig' or 'ax'.")
-        
+
         ### Add gridding and labels to the layers
         if labels is None:
             result_labels = self.layer_names
             if result_labels is not None:
                 labels = result_labels
             else:
-                labels = [f"Layer {i}" for i in range(N+1)]
+                labels = [f"Layer {i}" for i in range(N + 1)]
         # Layers:
         if grid_z:
             for zi in z:
-                ax.axhline(zi, color='white', linestyle='--', alpha=0.2, linewidth=0.5)
+                ax.axhline(zi, color="white", linestyle="--", alpha=0.2, linewidth=0.5)
             if grid_labels and labels is not None:
                 for i, zi in enumerate(z):
-                    name = labels[i+1]
-                    ax.text(x=1.0, y=zi, s=name, transform=ax.get_yaxis_transform(), ha='right', va='top', color='white')
-                ax.text(x=1.0, y=z[0], s=labels[0], transform=ax.get_yaxis_transform(), ha='right', va='bottom', color='white')
+                    name = labels[i + 1]
+                    ax.text(
+                        x=1.0,
+                        y=zi,
+                        s=name,
+                        transform=ax.get_yaxis_transform(),
+                        ha="right",
+                        va="top",
+                        color="white",
+                    )
+                ax.text(
+                    x=1.0,
+                    y=z[0],
+                    s=labels[0],
+                    transform=ax.get_yaxis_transform(),
+                    ha="right",
+                    va="bottom",
+                    color="white",
+                )
         # Critical Angles
-        if grid_crit and x_selection == "theta" and critical_angles is not None: # Is a angle plot.
+        if (
+            grid_crit and x_selection == "theta" and critical_angles is not None
+        ):  # Is a angle plot.
             for ang in critical_angles:
-                ax.axvline(x=ang, color='white', linestyle='--', alpha=0.2, linewidth=0.5)    
+                if not angles_in_deg:
+                    ang = np.deg2rad(ang)
+                if ang > x_data.min() and ang < x_data.max():
+                    ax.axvline(
+                        x=ang, color="white", linestyle="--", alpha=0.2, linewidth=0.5
+                    )
             if grid_labels and labels is not None:
-                for i, ang in enumerate(critical_angles):    
-                    name = labels[i+1]
-                    ax.text(x=ang, y=0.00, s=name, 
-                            transform=ax.get_xaxis_transform(), 
-                            color="white", ha='center')
+                for i, ang in enumerate(critical_angles):
+                    if not angles_in_deg:
+                        ang = np.deg2rad(ang)
+                    if ang > x_data.min() and ang < x_data.max():
+                        name = labels[i + 1]
+                        ax.text(
+                            x=ang,
+                            y=0.00,
+                            s=name,
+                            transform=ax.get_xaxis_transform(),
+                            color="white",
+                            ha="center",
+                        )
         return fig, ax
 
     def generate_pretty_figure_XEFI_intensity(
@@ -592,6 +663,13 @@ class BaseResult(metaclass=ABCMeta):
             The matplotlib figure to use for the plot. If None, a new figure is created.
         ax : Axes | None, optional
             The matplotlib axes to use for the plot. If None, a new axes is created.
+
+        Returns
+        -------
+        fig : Figure | SubFigure
+            The matplotlib figure containing the plot.
+        ax : Axes
+            The matplotlib axes containing the plot.
         """
         if fig is None and ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=300)
@@ -602,26 +680,55 @@ class BaseResult(metaclass=ABCMeta):
             assert fig is not None
             ax = fig.add_subplot(1, 1, 1)
 
+        return fig, ax
+
     def graph_wavevectors(
         self,
         ax_re: mplAxes | None = None,
         ax_im: mplAxes | None = None,
     ) -> tuple[mplAxes, mplAxes] | None:
-        """Plot the wavevectors for each layer as a function of angle/energy."""
+        """
+        Plot the wavevectors for each layer as a function of angle/energy.
+
+        Parameters
+        ----------
+        ax_re : mplAxes | None, optional
+            The matplotlib axes to use for the real part of the wavevector plot.
+            If `ax_im` is also None, new axes are created.
+        ax_im : mplAxes | None, optional
+            The matplotlib axes to use for the imaginary part of the wavevector plot.
+            If `ax_re` is also None, new axes are created.
+
+        Returns
+        -------
+        ax_re : matplotlib.Axes
+            The axes handle for the real component wavevector plot.
+        ax_im : matplotlib.Axes
+            The axes handle for the imaginary component wavevector plot.
+        """
         L, M, N = self.L, self.M, self.N
+        assert L is not None and M is not None and N is not None
         # Create a graph
         if ax_re is None and ax_im is None:
             fig, (ax_re, ax_im) = plt.subplots(2, 1, sharex=True)
             ax_re.set_ylabel("Wavevector Re")
             ax_im.set_ylabel("Wavevector Im")
             ax_im.set_xlabel("Angle (degrees)")
-        
-        for i in range(self.L):
-            for j in range(self.N+1):
+
+        for i in range(L):
+            for j in range(N + 1):
                 if ax_re is not None:
-                    ax_re.plot(self.theta_deg, self.wavevectors[i, :, j].real, label=f"Layer {j}")
+                    ax_re.plot(
+                        self.theta_deg,
+                        self.wavevectors[i, :, j].real,
+                        label=f"Layer {j}",
+                    )
                 if ax_im is not None:
-                    ax_im.plot(self.theta_deg, self.wavevectors[i, :, j].imag, label=f"Layer {j}")
+                    ax_im.plot(
+                        self.theta_deg,
+                        self.wavevectors[i, :, j].imag,
+                        label=f"Layer {j}",
+                    )
         return ax_re, ax_im
 
     def graph_fresnel(
@@ -629,94 +736,344 @@ class BaseResult(metaclass=ABCMeta):
         ax_re: mplAxes | None = None,
         ax_im: mplAxes | None = None,
     ) -> tuple[mplAxes, mplAxes] | None:
-        """Plot the Fresnel coefficients for each interface as a function of angle/energy."""
+        """
+        Plot the Fresnel coefficients for each interface as a function of angle/energy.
+
+        Parameters
+        ----------
+        ax_re : mplAxes | None, optional
+            The matplotlib axes to use for the real part of the Fresnel coefficients plot.
+            If `ax_im` is also None, new axes are created.
+        ax_im : mplAxes | None, optional
+            The matplotlib axes to use for the imaginary part of the Fresnel coefficients plot.
+            If `ax_re` is also None, new axes are created.
+
+        Returns
+        -------
+        ax_re : matplotlib.Axes
+            The axes handle for the real component Fresnel coefficients plot.
+        ax_im : matplotlib.Axes
+            The axes handle for the imaginary component Fresnel coefficients plot.
+        """
+        L, M, N = self.L, self.M, self.N
+        assert L is not None and M is not None and N is not None
         if ax_re is None and ax_im is None:
             fig, (ax_re, ax_im) = plt.subplots(2, 1, sharex=True)
             ax_im.set_xlabel("Angle (degrees)")
             ax_re.set_ylabel("Fresnel Coefficients (Re)")
             ax_im.set_ylabel("Fresnel Coefficients (Im)")
 
-        for l in range(L):
+        for l_index in range(L):
             for i in range(N):
-                ax_re.plot(self.theta_deg, self.fresnel_r[l, :, i].real, label="Fr R (Re) " + self.layer_names[i+1])
-                ax_im.plot(self.theta_deg, self.fresnel_r[l, :, i].imag, label="Fr R (Im) " + self.layer_names[i+1])
-                ax_re.plot(self.theta_deg, self.fresnel_t[l, :, i].real, label="Fr T (Re) " + self.layer_names[i+1])
-                ax_im.plot(self.theta_deg, self.fresnel_t[l, :, i].imag, label="Fr T (Im) " + self.layer_names[i+1])
+                ax_re.plot(
+                    self.theta_deg,
+                    self.fresnel_r[l_index, :, i].real,
+                    label="Fr R (Re) " + self.layer_names[i + 1],
+                )
+                ax_im.plot(
+                    self.theta_deg,
+                    self.fresnel_r[l_index, :, i].imag,
+                    label="Fr R (Im) " + self.layer_names[i + 1],
+                )
+                ax_re.plot(
+                    self.theta_deg,
+                    self.fresnel_t[l_index, :, i].real,
+                    label="Fr T (Re) " + self.layer_names[i + 1],
+                )
+                ax_im.plot(
+                    self.theta_deg,
+                    self.fresnel_t[l_index, :, i].imag,
+                    label="Fr T (Im) " + self.layer_names[i + 1],
+                )
         ax_re.legend()
         ax_im.legend()
 
         return ax_re, ax_im
-    
-    def graph_layer_EF_amplitude(
+
+    def graph_field_coefficients(
         self,
         ax_R: mplAxes | None = None,
         ax_T: mplAxes | None = None,
         ax_X: mplAxes | None = None,
+        layers: int | list[int] | range | None = None,
+        inset: bool = True,
+        inset_loc: Literal[
+            "upper left",
+            "upper right",
+            "center left",
+            "center right",
+            "upper center",
+            "lower center",
+            "center",
+            "lower left",
+            "lower right",
+        ] = "upper right",
     ) -> tuple[mplAxes, mplAxes, mplAxes | None]:
-        """Plot the electric field amplitude solved within each layer."""
+        """
+        Plot the electric field amplitudes solved within each layer via the interfaces.
+
+        Parameters
+        ----------
+        ax_R : mplAxes | None
+            The axes to plot the reflectance on.
+        ax_T : mplAxes | None
+            The axes to plot the transmittance on.
+        ax_X : mplAxes | None
+            The axes to plot the ratio of reflected to transmitted fields.
+        layers : int | list[int] | None
+            The index or indices of the layers to plot.
+        inset : bool, optional
+            Whether to add insets to the plots. By default True.
+        inset_loc : Literal["upper left", "upper right", "center left", "center right",
+                           "upper center", "lower center", "center",
+                           "lower left", "lower right"], optional
+            The location of the inset axes. By default "upper right".
+
+        Returns
+        -------
+        tuple[mplAxes, mplAxes, mplAxes | None]
+            The axes used for the reflectance, transmittance, and ratio of reflected to transmitted fields.
+        """
         X, R, T = self.X, self.R, self.T
         L, M, N = self.L, self.M, self.N
-        critical_angles = self.critical_angles
+        critical_angles = np.rad2deg(self.critical_angles)
         angles = self.theta_deg
         fresnel_r = self.fresnel_r
-        
+
         assert N is not None and N >= 2, "N (interfaces) must be >= 2"
         assert angles is not None
         assert fresnel_r is not None
-        
+
+        if layers is None:
+            layers = range(N + 1)
+        elif isinstance(layers, int):
+            layers = [layers]
+
         layer_names = self.layer_names
         if layer_names is None:
-           layer_names = [f"Layer {i}" for i in range(N+1)]
+            layer_names = [f"Layer {i}" for i in layers]
 
         if ax_R is None and ax_T is None and ax_X is None:
             if X is not None:
-                fig,(ax_R, ax_T, ax_X) = plt.subplots(3,1, sharex=True, figsize=(10,12)) 
+                fig, ax = plt.subplots(3, 1, sharex=True, figsize=(10, 12))
+                (ax_R, ax_T, ax_X) = ax
                 ax_X.set_ylabel("Reflected / Transmitted Field Ratio")
             else:
-                fig,(ax_R, ax_T) = plt.subplots(2,1, sharex=True, figsize=(10,8)) 
-                
+                fig, ax = plt.subplots(2, 1, sharex=True, figsize=(10, 8))
+                (ax_R, ax_T) = ax
+
             ax[-1].set_xlabel("Angle (degrees)")
             ax_R.set_ylabel("Reflectance")
             ax_T.set_ylabel("Transmittance")
             fig.suptitle(f"XEFI Calculation using {self.method.value} method")
+        else:
+            ax = []
+            if ax_R:
+                ax.append(ax_R)
+            if ax_T:
+                ax.append(ax_T)
+            if ax_X:
+                ax.append(ax_X)
 
-        axin1 = ax_R.inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
-        axin2 = ax_T.inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
-        if X is not None:
-            axin3 = ax_X.inset_axes([0.5, 0.5, 0.45, 0.4]) # [x, y, width, height]
+        loc: tuple[float, float, float, float]
+        match inset_loc:
+            case "upper right":
+                loc = (0.5, 0.5, 0.45, 0.4)
+            case "upper left":
+                loc = (0.05, 0.5, 0.45, 0.4)
+            case "lower left":
+                loc = (0.05, 0.1, 0.45, 0.4)
+            case "lower right":
+                loc = (0.5, 0.1, 0.45, 0.4)
+            case "center left":
+                loc = (0.05, 0.3, 0.45, 0.4)
+            case "center right":
+                loc = (0.5, 0.3, 0.45, 0.4)
+            case "upper center":
+                loc = (0.275, 0.5, 0.45, 0.4)
+            case "lower center":
+                loc = (0.275, 0.1, 0.45, 0.4)
+            case "center":
+                loc = (0.275, 0.3, 0.45, 0.4)
+            case _:
+                warnings.warn("Unknown inset location, defaulting to upper right.")
+                loc = (0.5, 0.5, 0.45, 0.4)
+
+        if inset:
+            # Check if existing inset:
+            axin1, axin2 = None, None
+            if ax_R:
+                for child in ax_R.get_children():
+                    if isinstance(child, mplAxes):
+                        axin1 = child
+                        break
+                if axin1 is None:
+                    axin1 = (
+                        ax_R.inset_axes(loc) if ax_R else None
+                    )  # [x, y, width, height]
+            if ax_T:
+                for child in ax_T.get_children():
+                    if isinstance(child, mplAxes):
+                        axin2 = child
+                        break
+                if axin2 is None:
+                    axin2 = (
+                        ax_T.inset_axes(loc) if ax_T else None
+                    )  # [x, y, width, height]
+            if X is not None and ax_X:
+                axin3 = None
+                for child in ax_X.get_children():
+                    if isinstance(child, mplAxes):
+                        axin3 = child
+                        break
+                if axin3 is None:
+                    axin3 = (
+                        ax_X.inset_axes(loc) if ax_X else None
+                    )  # [x, y, width, height]
         if L == 1:
-            for i in range(N+1):
-                ax_R.plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
-                ax_T.plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
-                if X is not None:
-                    ax_X.plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
-                axin1.plot(angles, np.abs(R[0, :, i])**2, label = layer_names[i], alpha=0.7)
-                axin2.plot(angles, np.abs(T[0, :, i])**2, label = layer_names[i], alpha=0.7)
-                if X is not None:
-                    axin3.plot(angles, np.abs(X[0, :, i])**2, label = layer_names[i], alpha=0.7)
-        ax_R.plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
-        ax_R.plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray', alpha=0.7)
-        axin1.plot(angles, np.abs(fresnel_r[0,:,0])**2, label="Fresnel R0", linestyle='--', color='k', alpha=0.7)
-        axin1.plot(angles, np.abs(fresnel_r[0,:,1])**2, label="Fresnel R1", linestyle='--', color='gray', alpha=0.7)
+            assert M and M > 1
+            for i in layers:
+                if ax_R:
+                    ax_R.plot(
+                        angles,
+                        np.abs(R[:, i]) ** 2,
+                        label=f"$|R_{i}|^2$ {layer_names[i]}",
+                        alpha=0.7,
+                    )
+                if ax_T:
+                    ax_T.plot(
+                        angles,
+                        np.abs(T[:, i]) ** 2,
+                        label=f"$|T_{i}|^2$ {layer_names[i]}",
+                        alpha=0.7,
+                    )
+                if X is not None and ax_X:
+                    ax_X.plot(
+                        angles,
+                        np.abs(X[:, i]) ** 2,
+                        label=f"$|X_{i}|^2$ {layer_names[i]}",
+                        alpha=0.7,
+                    )
+                if inset:
+                    if ax_R:
+                        axin1.plot(
+                            angles,
+                            np.abs(R[:, i]) ** 2,
+                            label=f"$|R_{i}|^2$ {layer_names[i]}",
+                            alpha=0.7,
+                        )
+                    if ax_T:
+                        axin2.plot(
+                            angles,
+                            np.abs(T[:, i]) ** 2,
+                            label=f"$|T_{i}|^2$ {layer_names[i]}",
+                            alpha=0.7,
+                        )
+                    if X is not None and ax_X:
+                        axin3.plot(
+                            angles,
+                            np.abs(X[:, i]) ** 2,
+                            label=f"$|X_{i}|^2$ {layer_names[i]}",
+                            alpha=0.7,
+                        )
+            if ax_R:
+                ax_R.plot(
+                    angles,
+                    np.abs(fresnel_r[:, 0]) ** 2,
+                    label="Fresnel R0",
+                    linestyle="--",
+                    color="k",
+                    alpha=0.7,
+                )
+                ax_R.plot(
+                    angles,
+                    np.abs(fresnel_r[:, 1]) ** 2,
+                    label="Fresnel R1",
+                    linestyle="--",
+                    color="gray",
+                    alpha=0.7,
+                )
+                if inset:
+                    axin1.plot(
+                        angles,
+                        np.abs(fresnel_r[:, 0]) ** 2,
+                        label="Fresnel R0",
+                        linestyle="--",
+                        color="k",
+                        alpha=0.7,
+                    )
+                    axin1.plot(
+                        angles,
+                        np.abs(fresnel_r[:, 1]) ** 2,
+                        label="Fresnel R1",
+                        linestyle="--",
+                        color="gray",
+                        alpha=0.7,
+                    )
 
-        axins = [axin1, axin2] + ([axin3] if X is not None else [])
-        if critical_angles is not None:
-            for axin in axins:
-                axin.set_xlim(np.rad2deg(np.min(critical_angles[:, :])) - 0.02, np.rad2deg(np.max(critical_angles[:, :])) + 0.02)
+        if inset:
+            axins = []
+            if ax_R:
+                axins += [axin1]
+            if ax_T:
+                axins += [axin2]
+            if X is not None and ax_X:
+                axins += [axin3]
 
-        
-            for l in range(len(ax)):
+        if critical_angles is not None and critical_angles.ndim == 1:
+            # Use critical angles within desired range
+            critical_angles = critical_angles[
+                (critical_angles > angles.min()) & (critical_angles < angles.max())
+            ]
+            if inset:
+                for axin in axins:
+                    # Set the inset to examine the critical angles in detail
+                    axin.set_xlim(
+                        np.min(critical_angles[:]) - 0.02,
+                        np.max(critical_angles[:]) + 0.02,
+                    )
+            for l_index in range(len(ax)):
                 if L == 1:
-                    for i in range(N):
+                    for i in layers:
+                        j = i - 1  # critical angle index is one before
+                        if j >= 0:
                             # Add vertical line
-                            ax[l].axvline(x=np.rad2deg(critical_angles[0, i]), color='k', linestyle='--', linewidth=0.5, alpha=0.2)
-                            ax[l].set_ylim(1e-4, 5.0)
-            ax[l].set_yscale("log")    
-            if np.max(axins[l].get_ylim()) > 10:
-                axins[l].set_ylim(np.min(axins[l].get_ylim()), 1e1)
-        ax_R.legend()
-        
-        
+                            ax[l_index].axvline(
+                                x=critical_angles[j],
+                                color="k",
+                                linestyle="--",
+                                linewidth=0.5,
+                                alpha=0.2,
+                            )
+                            ax[l_index].text(
+                                x=critical_angles[j],
+                                y=1.05,
+                                s=f"{layer_names[i]}",
+                                rotation=0,
+                                color="k",
+                                alpha=0.5,
+                                ha="center",
+                                va="top",
+                                transform=ax[l_index].get_xaxis_transform(),
+                            )
+                            ax[l_index].set_ylim(1e-4, 5.0)
+                            if inset:
+                                for axin in axins:
+                                    axin.axvline(
+                                        x=critical_angles[j],
+                                        color="k",
+                                        linestyle="--",
+                                        linewidth=0.5,
+                                        alpha=0.2,
+                                    )
+
+                if inset and np.max(axins[l_index].get_ylim()) > 10:
+                    axins[l_index].set_ylim(np.min(axins[l_index].get_ylim()), 1e1)
+                ax[l_index].set_yscale("log")
+
+        return ax_R, ax_T, ax_X
+
+
 class BaseRoughResult(BaseResult, metaclass=ABCMeta):
     """
     An abstract base class for handling roughness results in XEFI.
@@ -755,7 +1112,7 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         # Reset new properties
         self.roughness_z = None
         return
-    
+
     @override
     def generate_pretty_figure_XEFI(
         self,
@@ -763,13 +1120,13 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         fig: mplFig | mplSubFig | None = None,
         ax: mplAxes | None = None,
         cbar_loc: Literal["fig", "ax"] = "fig",
-        cmap: Colormap = plt.cm.get_cmap("viridis"),
+        cmap: Colormap = plt.get_cmap("viridis"),
         norm: Literal["linear", "log"] | Normalize = "linear",
-        m: int | None = None,
-        l: int | None = None,
+        m_index: int | None = None,
+        l_index: int | None = None,
         labels: list[str] | None = None,
         grid_z: bool = True,
-        grid_labels : bool = True,
+        grid_labels: bool = True,
         grid_crit: bool = True,
         grid_roughness: bool = True,
     ) -> tuple[mplFig | mplSubFig, mplAxes]:
@@ -798,18 +1155,18 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             The normalization to use for the colormap. If "linear", uses a linear normalization;
             if "log", uses a logarithmic normalization. Defaults to "linear".
             Can also provide a custom normalization object.
-        m : int | None, optional
+        m_index : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
-        l : int | None, optional
+        l_index : int | None, optional
             A singular index to consider for the beam energies. Defaults to None.
         labels : list[str] | None, optional
             The labels for the z layers. If None, defaults to automatic labels.
         grid_z : bool, optional
             Whether to plot the layer grid. Defaults to True.
-        grid_crit : float, optional
-            Whether to plot the critical angles grid. Defaults to True.
         grid_labels : bool, optional
             Whether to plot the z layer labels. Defaults to True.
+        grid_crit : float, optional
+            Whether to plot the critical angles grid. Defaults to True.
         grid_roughness : bool, optional
             Whether to plot the roughness profile. Defaults to True.
 
@@ -825,14 +1182,14 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             cbar_loc=cbar_loc,
             cmap=cmap,
             norm=norm,
-            m=m,
-            l=l,
+            m_index=m_index,
+            l_index=l_index,
             labels=labels,
             grid_z=grid_z,
             grid_labels=grid_labels,
-            grid_crit=grid_crit
+            grid_crit=grid_crit,
         )
-        
+
         # Add lines to display the roughness
         if grid_roughness:
             z = self.z
@@ -840,11 +1197,11 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             for i, zi in enumerate(z):
                 ax.fill_between(
                     x=self.theta_deg,
-                    y1 = zi - zr[i] / 2,
-                    y2 = zi + zr[i] / 2,
+                    y1=zi - zr[i] / 2,
+                    y2=zi + zr[i] / 2,
                     alpha=0.2,
                     hatch="/",
-                    color="white"
+                    color="white",
                 )
-                
+
         return fig, ax

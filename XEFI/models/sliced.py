@@ -2,11 +2,10 @@
 Module for the XEFI calculation of a sliced set of layers, decomposed into a specified thickness.
 """
 
-from XEFI.models.results import BaseResult
-import kkcalc as kkc
+from XEFI.models.results import BaseRoughResult
 
 
-class SlicedResult(BaseResult):
+class SlicedResult(BaseRoughResult):
     """
     Result class for the sliced XEFI model, inheriting from BaseResult.
 
@@ -18,5 +17,3 @@ class SlicedResult(BaseResult):
     Attributes
     ----------
     """
-    
-    
