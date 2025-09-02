@@ -10,7 +10,8 @@ repos:
     rev: v5.0.0
     hooks:
     -   id: check-added-large-files
-        exclude: '^tests/test_data/.*\.mda$'
+        args: ['--maxkb=1500']
+        exclude: '^tests/test_data/.*\.mda$ | ^examples/.*$'
     -   id: check-toml
     -   id: check-yaml
     -   id: end-of-file-fixer
