@@ -4,7 +4,7 @@ A package for calculations of X-ray Electric Field Intensities (XEFI) using the 
 This package calculates discrete models of multi-layer structures, including the ability to slice simplistic models into arbitrary layers.
 Supports the use of the `KKCalc` package to calculate the index of refraction within layers.
 
-![XEFI](docs/static/graphics/dev-ps_p3ht_si-XEFI_map.png)
+![XEFI](docs/static/graphics/basic-dev-ps_p3ht_si-XEFI_map.png)
 
 ### The Model
 To make this model representative of the code, we count $N+1$ layers from $i=0$ to $i=N$ inclusive, as `python` indexes.
