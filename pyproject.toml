@@ -39,6 +39,7 @@ dev = [
     "commitizen",
     "commitlint",
     "black",
+    # "plotly",
 ]
 
 docs = [
