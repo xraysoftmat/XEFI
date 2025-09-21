@@ -2,7 +2,7 @@
 Module for the XEFI calculation of a sliced set of layers, decomposed into a specified thickness.
 """
 
-from XEFI.models.results import BaseRoughResult
+from XEFI.results import BaseRoughResult
 
 
 class SlicedResult(BaseRoughResult):

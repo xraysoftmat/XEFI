@@ -167,6 +167,7 @@ def XEF_Basic(
     angles = np.atleast_1d(angles)
     theta = np.deg2rad(angles) if angles_in_deg else angles
     """The angles in radians (with length M)"""
+    theta = np.atleast_1d(theta)
     result.theta = theta
     # Angle number
     M: int = angles.shape[0]
@@ -338,7 +339,7 @@ def XEF_Basic(
     # Calculate angles of incidence for each layer: Snell's Law
     angles_of_incidence[:, :, 1:] = np.arccos(
         np.cos(theta[np.newaxis, :, np.newaxis])
-        * ref_idxs[:, np.newaxis, 0]
+        * ref_idxs[:, np.newaxis, 0, np.newaxis]
         / ref_idxs[:, np.newaxis, 1:]
     )
     # Calculate wavevectors for each layer

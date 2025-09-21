@@ -4,7 +4,7 @@ XEFI provides tools for simulating and fitting X-ray Electric Field Intensity pr
 
 from XEFI import models
 from XEFI.models import XEF_Basic, BasicResult, SlicedResult
-from XEFI.models.results import XEF_method
+from XEFI.results import XEF_method
 import XEFI.fitting as fitting
 
 
