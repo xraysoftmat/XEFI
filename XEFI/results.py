@@ -1286,11 +1286,7 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
 
     Attributes
     ----------
-    sigma : npt.NDArray[np.floating] | None
-        The roughness values for each interface (N) in angstroms (Å).
-    roughness_profile : npt.NDArray[np.floating] | None
-        The roughness profile as a function of z-coordinate.
-    roughness_z : npt.NDArray[np.floating] | None
+    z_roughness : npt.NDArray[np.floating] | None
         The z-coordinates corresponding to the roughness profile in angstroms (Å).
     """
 
