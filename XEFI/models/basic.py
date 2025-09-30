@@ -54,27 +54,26 @@ class BasicResult(BaseResult):
         The number of angles of incidence considered.
     N : int | None
         The number of interfaces, corresponding to N+1 layers.
-    beam_energy : float | None
-        The energy of the X-ray beam in eV.
-    wavelength : float | None
-        The wavelength of the X-ray in Angstroms (Å).
+    energies : float | None
+        The energies of the X-ray beam in eV (L).
     theta : npt.NDArray[np.floating] | None
         The angles of incidence (M) in the first layer (i=0) in degrees.
     angles_of_incidence : npt.NDArray[np.floating] | None
-        The angles of incidence in each layer in radians (N+1, M).
+        The complex angles of incidence for each energy, angle and (within each) layer in radians (L, M, N+1).
+    wavevectors : npt.NDArray[np.complexfloating] | None
+        The unsigned complex z-component wavevector in each layer (L, M, N+1)
     refractive_indices : npt.NDArray[np.complexfloating] | None
-        The complex refractive indices of each layer (N+1).
-    wavevectors : npt.NDArray[np.floating] | None
-        The z-component wavevector in each layer (N+1, M).
-        Defined as a magnitude with a postitive complex phase, rather than a vector direction.
-    k0 : float | None
-        The incident vacuum wavevector.
+        The complex refractive indices at each energy of each layer (L, N+1).
     critical_angles : npt.NDArray[np.floating] | None
-        The critical angles of each energy and material interface (excluding vacuum/air) (L, N) in radians.
+        The critical angles for total internal reflection for each beam energy and interface (L, N) in radians.
+    k0 : npt.NDArray[np.floating] | None
+        The incident vacuum wavevector for each energy (L).
     fresnel_r : npt.NDArray[np.complexfloating] | None
-        The Fresnel reflection coefficients for each interface and angle (N, M).
+        The Fresnel reflection coefficients for each energy, angle and interface (L, M, N).
     fresnel_t : npt.NDArray[np.complexfloating] | None
-        The Fresnel transmission coefficients for each interface and angle (N, M).
+        The Fresnel transmission coefficients for each energy, angle and interface (L, M, N).
+    X : npt.NDArray[np.complexfloating] | None
+        The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, N).
     method : XEF_method | None
         The XEF calculation method used.
     layer_names : list[str] | None
@@ -93,39 +92,38 @@ class BasicRoughResult(BaseRoughResult):
     ----------
     z : npt.NDArray[np.floating] | None
         The z-coordinate of the (N) interfaces in Angstroms (Å).
-    z_roughness : npt.NDArray[np.floating] | None
-        The roughness values for each interface (N) in angstroms (Å).
     L : int | None
         The number of beam energies considered.
     M : int | None
         The number of angles of incidence considered.
     N : int | None
         The number of interfaces, corresponding to N+1 layers.
-    beam_energy : float | None
-        The energy of the X-ray beam in eV.
-    wavelength : float | None
-        The wavelength of the X-ray in Angstroms (Å).
+    energies : float | None
+        The energies of the X-ray beam in eV (L).
     theta : npt.NDArray[np.floating] | None
         The angles of incidence (M) in the first layer (i=0) in degrees.
     angles_of_incidence : npt.NDArray[np.floating] | None
-        The angles of incidence in each layer in radians (N+1, M).
+        The complex angles of incidence for each energy, angle and (within each) layer in radians (L, M, N+1).
+    wavevectors : npt.NDArray[np.complexfloating] | None
+        The unsigned complex z-component wavevector in each layer (L, M, N+1)
     refractive_indices : npt.NDArray[np.complexfloating] | None
-        The complex refractive indices of each layer (N+1).
-    wavevectors : npt.NDArray[np.floating] | None
-        The z-component wavevector in each layer (N+1, M).
-        Defined as a magnitude with a postitive complex phase, rather than a vector direction.
-    k0 : float | None
-        The incident vacuum wavevector.
+        The complex refractive indices at each energy of each layer (L, N+1).
     critical_angles : npt.NDArray[np.floating] | None
-        The critical angles of each energy and material interface (excluding vacuum/air) (L, N) in radians.
+        The critical angles for total internal reflection for each beam energy and interface (L, N) in radians.
+    k0 : npt.NDArray[np.floating] | None
+        The incident vacuum wavevector for each energy (L).
     fresnel_r : npt.NDArray[np.complexfloating] | None
-        The Fresnel reflection coefficients for each interface and angle (N, M).
+        The Fresnel reflection coefficients for each energy, angle and interface (L, M, N).
     fresnel_t : npt.NDArray[np.complexfloating] | None
-        The Fresnel transmission coefficients for each interface and angle (N, M).
+        The Fresnel transmission coefficients for each energy, angle and interface (L, M, N).
+    X : npt.NDArray[np.complexfloating] | None
+        The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, N).
     method : XEF_method | None
         The XEF calculation method used.
     layer_names : list[str] | None
         The names of the layers (N+1), if provided.
+    z_roughness : npt.NDArray[np.floating] | None
+        The z-coordinates corresponding to the roughness profile in angstroms (Å).
     rough_S : npt.NDArray[np.complex128] | None
         The roughness reflection factor for each energy, angle and interface (L, M, N).
     rough_T : npt.NDArray[np.complex128] | None
@@ -207,7 +205,7 @@ def XEF_Basic(
     ),
     *,
     method: XEF_method | str = XEF_method.DEV,
-    z_roughness: list[float] | npt.NDArray[np.floating],
+    z_roughness: list[float | int] | npt.NDArray[np.floating],
     layer_names: list[str] | None = None,
     angles_in_deg: bool = True,
 ) -> BasicRoughResult: ...
@@ -225,7 +223,7 @@ def XEF_Basic(
     ),
     *,
     method: XEF_method | str = XEF_method.DEV,
-    z_roughness: list[float] | npt.NDArray[np.floating] | None = None,
+    z_roughness: list[float | int] | npt.NDArray[np.floating] | None = None,
     layer_names: list[str] | None = None,
     angles_in_deg: bool = True,
 ) -> BasicResult | BasicRoughResult:
@@ -312,7 +310,7 @@ def XEF_Basic(
         layer_names = [f"Layer {i}" for i in range(N + 1)]
 
     # Roughness
-    if result.__class__ is BasicRoughResult:  # z_roughness is not None:
+    if isinstance(result, BasicRoughResult):  # z_roughness is not None:
         z_roughness = np.array(z_roughness, dtype=np.float64, copy=True)
         assert z_roughness.ndim == 1
         result.z_roughness = z_roughness
@@ -595,6 +593,8 @@ def XEF_Abeles_Ohta(
     Koji Ohta and Hatsuo Ishida, "Matrix formalism for calculation of electric field intensity of light in stratified multilayered films,"
     Appl. Opt. 29, 1952-1959 (1990) https://doi.org/10.1364/AO.29.001952
 
+    NOTE: This method is not fully tested and may not be fully correct. Use with caution.
+
     Parameters
     ----------
     L : int
@@ -619,6 +619,10 @@ def XEF_Abeles_Ohta(
     T : npt.NDArray[np.complexfloating]
         The transmission coefficients for each energy (L), angle (M) and interface (N).
     """
+    warnings.warn(
+        "The Ohta method is not fully tested and may not be correct. Use with caution.",
+        UserWarning,
+    )
     # In Ohta, j=0 == Air, j=1 == First layer, j=m == last layer, j=m+1 == substrate.
     # So m+1 == N+2 for us
 
@@ -699,6 +703,8 @@ def XEF_Parratt_Tolan(
     Tolan, Metin. X-Ray Scattering from Soft-Matter Thin Films: Materials Science and Basic Research.
     Springer Tracts in Modern Physics. Springer, 1999. https://doi.org/10.1007/bfb0112834.
 
+    NOTE: This method is not fully tested and may not be correct. Use with caution.
+
     Parameters
     ----------
     L : int
@@ -725,6 +731,10 @@ def XEF_Parratt_Tolan(
     X : npt.NDArray[np.complexfloating]
         The complex ratio of Reflection and Transmission amplitudes, for each energy (L), angle (M) and interface (N).
     """
+    warnings.warn(
+        "The Tolan method is not fully tested and may not be correct. Use with caution.",
+        UserWarning,
+    )
     # Define the arrays.
     X = np.zeros((L, M, N + 1), dtype=np.complex128)
     """

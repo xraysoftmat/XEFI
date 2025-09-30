@@ -67,25 +67,26 @@ class BaseResult(metaclass=ABCMeta):
         The number of angles of incidence considered.
     N : int | None
         The number of interfaces, corresponding to N+1 layers.
-    beam_energy : float | None
-        The energy of the X-ray beam in eV.
-    wavelength : float | None
-        The wavelength of the X-ray in Angstroms (Å).
+    energies : float | None
+        The energies of the X-ray beam in eV (L).
     theta : npt.NDArray[np.floating] | None
         The angles of incidence (M) in the first layer (i=0) in degrees.
     angles_of_incidence : npt.NDArray[np.floating] | None
-        The angles of incidence in each layer in radians (N+1, M).
+        The complex angles of incidence for each energy, angle and (within each) layer in radians (L, M, N+1).
+    wavevectors : npt.NDArray[np.complexfloating] | None
+        The unsigned complex z-component wavevector in each layer (L, M, N+1)
     refractive_indices : npt.NDArray[np.complexfloating] | None
-        The complex refractive indices of each layer (N+1).
-    wavevectors : npt.NDArray[np.floating] | None
-        The z-component wavevector in each layer (N+1, M).
-        Defined as a magnitude with a postitive complex phase, rather than a vector direction.
-    k0 : float | None
-        The incident vacuum wavevector.
+        The complex refractive indices at each energy of each layer (L, N+1).
+    critical_angles : npt.NDArray[np.floating] | None
+        The critical angles for total internal reflection for each beam energy and interface (L, N) in radians.
+    k0 : npt.NDArray[np.floating] | None
+        The incident vacuum wavevector for each energy (L).
     fresnel_r : npt.NDArray[np.complexfloating] | None
-        The Fresnel reflection coefficients for each interface and angle (N, M).
+        The Fresnel reflection coefficients for each energy, angle and interface (L, M, N).
     fresnel_t : npt.NDArray[np.complexfloating] | None
-        The Fresnel transmission coefficients for each interface and angle (N, M).
+        The Fresnel transmission coefficients for each energy, angle and interface (L, M, N).
+    X : npt.NDArray[np.complexfloating] | None
+        The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, N).
     method : XEF_method | None
         The XEF calculation method used.
     layer_names : list[str] | None
@@ -110,7 +111,7 @@ class BaseResult(metaclass=ABCMeta):
         self.wavevectors: npt.NDArray[np.complexfloating] | None
         """The unsigned complex z-component wavevector in each layer (L, M, N+1)."""
         self.refractive_indices: npt.NDArray[np.complexfloating] | None
-        """The complex refractive indices of each layer (N+1)."""
+        """The complex refractive indices at each energy of each layer (L, N+1)."""
         self.critical_angles: npt.NDArray[np.floating] | None
         """The critical angles for total internal reflection for each beam energy and interface (L, N) in radians."""
         self.k0: npt.NDArray[np.floating] | float | None
@@ -165,16 +166,33 @@ class BaseResult(metaclass=ABCMeta):
 
         Returns
         -------
-        float | None
+        npt.NDArray[floating] | float | None
             The angle(s) of incidence in degrees, or None if theta is not set.
         """
         return np.rad2deg(self.theta) if self.theta is not None else None
+
+    @property
+    def critical_angles_deg(self) -> npt.NDArray[np.floating] | None:
+        """
+        The critical angles for each energy and interface (L, N) in degrees.
+
+        Returns
+        -------
+        npt.NDArray[floating] | float | None
+            The critical angles, or None if theta is not set.
+        """
+        return (
+            np.rad2deg(self.critical_angles)
+            if self.critical_angles is not None
+            else None
+        )
 
     def reset(self) -> None:
         """
         Clear/initialise the result object attributes to None.
         """
         self.z = None
+        self.energies = None
         self.L = None
         self.M = None
         self.N = None
@@ -331,7 +349,7 @@ class BaseResult(metaclass=ABCMeta):
     def electric_field_intensity(
         self, z_vals: npt.ArrayLike
     ) -> npt.NDArray[np.floating]:
-        """
+        r"""
         Calculate the total electric field intensity at given z-coordinates.
 
         .. math::
@@ -380,11 +398,86 @@ class BaseResult(metaclass=ABCMeta):
     #     """
     #     return self.electric_field_intensity(z_vals)
 
+    @staticmethod
+    def _sum_field_intensity(
+        intensities: npt.NDArray[np.floating],
+        bounds: tuple[float | int, float | int] | None = None,
+        z_vals: npt.NDArray[np.floating] | None = None,
+    ) -> npt.NDArray[np.floating]:
+        """
+        Create a summed intensity from a field and bounds.
+
+        Parameters
+        ----------
+        intensities : npt.NDArray[np.floating]
+            The real field intensity to sum the intensity of. Dimensions (L, M, len(z_vals)).
+        bounds : tuple[float | int, float | int]
+            A subset of z-values (min, max) over which to sum the intensity.
+        z_vals : npt.NDArray[np.floating]
+            The z-coordinates corresponding to the field values.
+
+        Returns
+        -------
+        npt.NDArray[np.floating]
+            The summed intensity over the specified bounds. Dimensions are (L, M),
+            unless L or M are singular, in which case the dimension is flattened.
+        """
+        if bounds is not None or z_vals is not None:
+            if bounds is None or z_vals is None:
+                raise ValueError(
+                    "If one of `bounds` or `z_vals` is provided, both must be provided."
+                )
+            # Get the subset
+            assert bounds is not None
+            bnds = sorted(bounds)
+            idxs = (z_vals >= bnds[0]) & (z_vals <= bnds[1])
+            # Calculate the intensity
+            intensities = intensities[idxs]
+            summed_intensity = np.sum(intensities, axis=-1)  # Sum over z-values
+            return summed_intensity
+        else:
+            summed_intensity = np.sum(intensities, axis=-1)  # Sum over z-values
+            return summed_intensity
+
+    def summed_intensity(
+        self,
+        z_vals: list[int | float] | npt.NDArray[np.floating],
+        bounds: tuple[float | int, float | int],
+    ) -> npt.NDArray[np.floating]:
+        r"""
+        Calculate the summed electric field intensity at given z-coordinates.
+
+        .. math::
+            I(z) = |E(z)|^2 = E(z) \cdot E^*(z)
+
+        The summed electric field intensity result has dimensions (L, M), where L is the number
+        of z-coordinates and M (`self.M`) is the number of angles of incidence in `self.theta`.
+
+        Parameters
+        ----------
+        z_vals : list[int | float] | npt.NDArray[np.floating]
+            The z-coordinates at which to calculate the electric field in angstroms (Å).
+        bounds : tuple[float | int, float | int]
+            A subset of z-coordinates (min, max) over which to sum the intensity.
+
+        Returns
+        -------
+        npt.NDArray[np.floating]
+            The summed electric field intensity at the specified z-coordinates and angle theta.
+            Dimensions are (L, M), unless L or M are singular, in which case the dimension is
+            flattened.
+        """
+        intensity = self.electric_field_intensity(z_vals)
+        return BaseResult._sum_field_intensity(
+            intensity, bounds=bounds, z_vals=np.asarray(z_vals)
+        )
+
     def _require_singular_x_data(
         self,
         l_index: int | None = None,
         m_index: int | None = None,
-    ) -> tuple[Literal["theta", "energy"] | None, np.ndarray | None, np.ndarray | None]:
+        angles_in_degrees: bool = True,
+    ) -> tuple[Literal["theta", "energy"], np.ndarray, np.ndarray | None]:
         """
         Ensure that the data for the x-axis (either `theta` or `energy`) is singular (1D).
 
@@ -398,6 +491,9 @@ class BaseResult(metaclass=ABCMeta):
             A singular index to consider for the beam energies. Defaults to None.
         m_index : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
+        angles_in_degrees : bool, optional
+            Whether to return the angles of incidence and the critical angles
+            in degrees (True) or radians (False).
 
         Returns
         -------
@@ -412,8 +508,11 @@ class BaseResult(metaclass=ABCMeta):
             interface (L, N) in radians. Subset if l_index is not None. None if not defined.
         """
         L, M = self.L, self.M
-        theta, energies = self.theta, self.energies
-        critical_angles = self.critical_angles
+        theta = self.theta_deg if angles_in_degrees else self.theta
+        energies = self.energies
+        critical_angles = (
+            self.critical_angles_deg if angles_in_degrees else self.critical_angles
+        )
 
         x_selection: Literal["theta", "energy"] | None = None
         if L is not None and L > 1 and M is not None and M > 1:
@@ -471,13 +570,15 @@ class BaseResult(metaclass=ABCMeta):
         grid_z: bool = True,
         grid_labels: bool = True,
         grid_crit: bool = True,
+        # sum: bool = False,  # TODO: Add this code.
+        # sum_bounds: tuple[float, float] | None = None,
     ) -> tuple[mplFig | mplSubFig, mplAxes]:
         """
         Generate a pretty 2D plot of the X-ray electric field intensity as a function of depth.
 
         The second dimension is either `theta` (angle of incidence) or `beam_energy`.
         This dimension is automatically chosen if one of the dimensions is singular (i.e., has length 1).
-        Otherwise, the user must specify either `m` or `l` to choose a singular index.
+        Otherwise, the user must specify either `m_index` or `l_index` to choose a singular index.
 
         Parameters
         ----------
@@ -528,11 +629,11 @@ class BaseResult(metaclass=ABCMeta):
 
         # Ensure L or M is singular for 2D plotting.
         N = self.N
-        x_selection: Literal["theta", "energy"]
-        x_data: npt.NDArray[np.floating]
+        x_selection: Literal["theta", "energy"] | None
+        x_data: npt.NDArray[np.floating] | None
 
         # Get the sliced x-data.
-        x_selection, x_data, critical_angles = self._require_singular_x_data(
+        x_selection, x_data, _ = self._require_singular_x_data(
             m_index=m_index,
             l_index=l_index,
         )
@@ -597,6 +698,68 @@ class BaseResult(metaclass=ABCMeta):
         else:
             raise ValueError("`cbar_loc` must be either 'fig' or 'ax'.")
 
+        self._add_gridding_to_XEFI(
+            ax=ax,
+            l_index=l_index,
+            m_index=m_index,
+            grid_z=grid_z,
+            grid_labels=grid_labels,
+            grid_crit=grid_crit,
+            labels=labels,
+        )
+
+        return fig, ax
+
+    def _add_gridding_to_XEFI(
+        self,
+        ax: mplAxes,
+        l_index: int | None = None,
+        m_index: int | None = None,
+        grid_z: bool = True,
+        grid_labels: bool = True,
+        grid_crit: bool = True,
+        labels: list[str] | None = None,
+    ) -> None:
+        """
+        To add gridding lines.
+
+        Grid lines can be added for specified:
+        - `grid_z`: `z` values of interfaces
+        - `grid_labels`: `labels` of different layers.
+        - `grid_crit`: the `critical_angles` of the interfaces.
+
+        The second dimension is either `theta` (angle of incidence) or `beam_energy`.
+        This dimension is automatically chosen if one of the dimensions is singular (i.e., has length 1).
+        Otherwise, the user must specify either `m_index` or `l_index` to choose a singular index.
+
+        Parameters
+        ----------
+        ax : Axes
+            The matplotlib axes to add the gridding.
+        l_index : int | None, optional
+            A singular index to consider for the beam energies. Defaults to None.
+        m_index : int | None, optional
+            A singular index to consider for the angles of incidence. Defaults to None.
+        grid_z : bool, optional
+            Whether to plot the layer grid. Defaults to True.
+        grid_labels : bool, optional
+            Whether to plot the z layer labels. Defaults to True.
+        grid_crit : float, optional
+            Whether to plot the critical angles grid. Defaults to True.
+        labels : list[str] | None, optional
+            The labels for the z layers. If None, defaults to automatic labels.
+        """
+
+        N, z = self.N, self.z
+        assert N is not None
+        assert z is not None
+
+        # Get the sliced x-data.
+        x_selection, x_data, critical_angles = self._require_singular_x_data(
+            m_index=m_index,
+            l_index=l_index,
+        )
+
         ### Add gridding and labels to the layers
         if labels is None:
             result_labels = self.layer_names
@@ -629,6 +792,7 @@ class BaseResult(metaclass=ABCMeta):
                     va="bottom",
                     color="white",
                 )
+
         # Critical Angles
         if (
             grid_crit and x_selection == "theta" and critical_angles is not None
@@ -650,35 +814,6 @@ class BaseResult(metaclass=ABCMeta):
                             color="white",
                             ha="center",
                         )
-        return fig, ax
-
-    def generate_pretty_figure_XEFI_intensity(
-        self,
-        z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
-        fig: mplFig | mplSubFig | None = None,
-        ax: mplAxes | None = None,
-    ) -> tuple[mplFig | mplSubFig, mplAxes]:
-        """
-        Generate a pretty plot of the summed XEFI intensity within each layer.
-
-        Parameters
-        ----------
-        z_vals : npt.NDArray[np.floating] | list[float | int] | None, optional
-            The z-coordinates at which to calculate the electric field intensity.
-            If None, uses the z-coordinates from the result object, with 10% padding.
-        fig : Figure | SubFigure | None, optional
-            The matplotlib figure to use for the plot. If None, a new figure is created.
-        ax : Axes | None, optional
-            The matplotlib axes to use for the plot. If None, a new axes is created.
-        """
-        if fig is None and ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=300)
-        elif fig is None and ax is not None:
-            fig = ax.figure
-        else:
-            # fig is not None and ax is None
-            assert fig is not None
-            ax = fig.add_subplot(1, 1, 1)
 
     def generate_pretty_figure(
         self,
@@ -718,6 +853,88 @@ class BaseResult(metaclass=ABCMeta):
             ax = fig.add_subplot(1, 1, 1)
 
         return fig, ax
+
+    def graph_refractive_indexes(
+        self,
+        ax_re: mplAxes | None = None,
+        ax_im: mplAxes | None = None,
+        l_index: int | None = None,
+    ) -> tuple[mplAxes, mplAxes] | None:
+        """
+        Plot the refractive indexes of each layer as function of z.
+
+        Parameters
+        ----------
+        ax_re : mplAxes | None, optional
+            The matplotlib axes to use for the real part of the refractive index plot.
+            If `ax_im` is also None, new axes are created.
+        ax_im : mplAxes | None, optional
+            The matplotlib axes to use for the imaginary part of the refractive index plot.
+            If `ax_re` is also None, new axes are created.
+        l_index : int | None, optional
+            The singular index for the energy axis.
+
+        Returns
+        -------
+        tuple[mplAxes, mplAxes] | None
+            A tuple containing the axes handles for the real and imaginary components
+            of the refractive index plot, or None if no axes were created.
+        """
+        L, N = self.L, self.N
+        assert N is not None and L is not None
+        z = self.z
+        assert z is not None
+        ref_idxs = self.refractive_indices
+        assert ref_idxs is not None
+
+        # Check the energy axis
+        if L > 1:
+            if l_index is None:
+                raise ValueError(
+                    f"Multiple energies specified {L}, but no singular `l_index` parameter chosen."
+                )
+            else:
+                ref_idxs = ref_idxs[l_index, :]
+
+        # Create a graph
+        if ax_re is None and ax_im is None:
+            fig, (ax_re, ax_im) = plt.subplots(2, 1)
+
+            fig.suptitle("Ref. index through the layer stack")
+            ax_im.set_xlabel("z (angstroms)")
+            ax_re.set_ylabel("Ref. index (Real)")
+            ax_im.set_ylabel("Ref. index (Imag)")
+        else:
+            fig = None
+
+        # Create the z map
+        zmin, zmax = np.min(z), np.max(z)
+        zlim = (
+            zmin - 0.1 * abs(zmax - zmin),
+            zmax + 0.1 * abs(zmax - zmin),
+        )  # 10% bounds overlap
+        # Code equivalent to plt.step function...
+        zset = [zlim[1]]
+        ref_set = [ref_idxs[0]]
+        for i, zi in enumerate(z):
+            print(i, ref_idxs[i])
+            zset += [zi, zi]
+            ref_set += [ref_idxs[i], ref_idxs[i + 1]]
+        zset.append(zlim[0])
+        ref_set.append(ref_idxs[-1])
+        zset = np.array(zset)
+        ref_set = np.array(ref_set)
+
+        if ax_re is not None:
+            ax_re.plot(zset, ref_set.real, label="Refractive Index")
+
+        if ax_im is not None:
+            ax_im.plot(
+                zset, ref_set.imag, label="Refractive Index" if ax_re is None else None
+            )
+
+        if fig is not None:
+            return ax_re, ax_im
 
     def graph_wavevectors(
         self,
@@ -1286,6 +1503,38 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
 
     Attributes
     ----------
+    z : npt.NDArray[np.floating] | None
+        The z-coordinate of the (N) interfaces in Angstroms (Å).
+    L : int | None
+        The number of beam energies considered.
+    M : int | None
+        The number of angles of incidence considered.
+    N : int | None
+        The number of interfaces, corresponding to N+1 layers.
+    energies : float | None
+        The energies of the X-ray beam in eV (L).
+    theta : npt.NDArray[np.floating] | None
+        The angles of incidence (M) in the first layer (i=0) in degrees.
+    angles_of_incidence : npt.NDArray[np.floating] | None
+        The complex angles of incidence for each energy, angle and (within each) layer in radians (L, M, N+1).
+    wavevectors : npt.NDArray[np.complexfloating] | None
+        The unsigned complex z-component wavevector in each layer (L, M, N+1)
+    refractive_indices : npt.NDArray[np.complexfloating] | None
+        The complex refractive indices at each energy of each layer (L, N+1).
+    critical_angles : npt.NDArray[np.floating] | None
+        The critical angles for total internal reflection for each beam energy and interface (L, N) in radians.
+    k0 : npt.NDArray[np.floating] | None
+        The incident vacuum wavevector for each energy (L).
+    fresnel_r : npt.NDArray[np.complexfloating] | None
+        The Fresnel reflection coefficients for each energy, angle and interface (L, M, N).
+    fresnel_t : npt.NDArray[np.complexfloating] | None
+        The Fresnel transmission coefficients for each energy, angle and interface (L, M, N).
+    X : npt.NDArray[np.complexfloating] | None
+        The complex ratio of downward and upward propagating fields for each energy, angle and interface (L, M, N).
+    method : XEF_method | None
+        The XEF calculation method used.
+    layer_names : list[str] | None
+        The names of the layers (N+1), if provided.
     z_roughness : npt.NDArray[np.floating] | None
         The z-coordinates corresponding to the roughness profile in angstroms (Å).
     """
@@ -1305,7 +1554,7 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         # Reset the parent properties
         super().reset()
         # Reset new properties
-        self.roughness_z = None
+        self.z_roughness = None
         return
 
     @override
@@ -1388,26 +1637,55 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             grid_crit=grid_crit,
             angles_in_deg=angles_in_deg,
         )
-
-        # Add lines to display the roughness
         if grid_roughness:
-            z = self.z
-            zr = self.z_roughness
-
-            x_selection, x_data, critical_angles = self._require_singular_x_data(
+            self._add_rough_gridding_to_XEFI(
+                ax,
                 l_index=l_index,
                 m_index=m_index,
             )
 
-            if x_selection is None:
-                raise ValueError("Requires a singular")
-            for i, zi in enumerate(z):
-                ax.fill_between(
-                    x=x_data,
-                    y1=zi - zr[i] / 2,
-                    y2=zi + zr[i] / 2,
-                    alpha=0.1,
-                    hatch="/",
-                    color="white",
-                )
         return fig, ax
+
+    def _add_rough_gridding_to_XEFI(
+        self,
+        ax: mplAxes,
+        l_index: int | None = None,
+        m_index: int | None = None,
+    ):
+        """
+        Represent the roughness on the grid by transparent bars.
+
+        Parameters
+        ----------
+        ax : mplAxes
+            The axis on which the XEFI map has been created.
+        l_index : int | None, optional
+            A singular index to consider for the beam energies. Defaults to None.
+        m_index : int | None, optional
+            A singular index to consider for the angles of incidence. Defaults to None.
+        """
+        z = self.z
+        zr = self.z_roughness
+
+        x_selection, x_data, _ = self._require_singular_x_data(
+            l_index=l_index,
+            m_index=m_index,
+        )
+
+        if x_selection is None:
+            raise ValueError(
+                "Requires a singular dependent variable (theta or energy)."
+            )
+        if z is None:
+            raise ValueError("`z` is not defined.")
+        if zr is None:
+            raise ValueError("`z_roughness` is not defined on the result.")
+        for i, zi in enumerate(z):
+            ax.fill_between(
+                x=x_data,
+                y1=zi - zr[i] / 2,
+                y2=zi + zr[i] / 2,
+                alpha=0.1,
+                hatch="/",
+                color="white",
+            )
