@@ -25,7 +25,9 @@ Here, layers $i=0$ and $i=N$ are semi-infinite layers, typically modelling air/v
 | $E^{Total}_i$| The total electric field in layer $i$.
 | $E_{beam}$   | The X-ray beam energy in eV.
 
-After recursively computing the ratio $X_i$, then solving the amplitudes $T_i$, $R_i$ at each interface, then the total electric field at depth $z$ in the film can then be calculated as the sum of downward and upward propogating waves:\
+After recursively computing the ratio $X_i$, then solving the amplitudes $T_i$, $R_i$ at each interface, then the total electric field at depth $z$ in the film can then be calculated as the sum of downward and upward propogating waves:
 ```math
-E^{Total}_i(E_{beam}, \theta^t_0, z) = T_i(E_{beam}, \theta^t_0) \exp\left(-i k_i \left(z-z_i\right)\right) + R_i  (E_{beam}, \theta^t_0) \exp\left(i k_i \left(z-z_i\right)\right)
+\begin{align}
+E^{Total}_i(E_{beam}, \theta^t_0, z) &=&&T_i(E_{beam}, \theta^t_0) \exp\left(-i k_i \left(z-z_i\right)\right) \\ &&&+R_i  (E_{beam}, \theta^t_0) \exp\left(i k_i \left(z-z_i\right)\right)\nonumber
+\end{align}
 ```

@@ -12,7 +12,7 @@
     name = "XEFI"
     version = "0.0.0"
     description = "Calculations for X-ray Electric Field Intensities using the Parratt recursive algorithm."
-    readme = "README.md"
+    readme = "README.rst"
     license = {file = "LICENSE"}
     keywords = ["X-ray", "Waveguiding", "Parratt", "Electric", "XEFI", "Intensity", "Field", "Intensity"]
     authors = [
