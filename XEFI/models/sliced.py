@@ -262,7 +262,7 @@ class SlicedResult(BaseRoughResult):
         return x_selection, x_data, critical_angles
 
     @override
-    def _add_gridding_to_XEFI(
+    def _add_XEFI_gridding(
         self,
         ax: Axes,
         l_index: int | None = None,
@@ -276,7 +276,7 @@ class SlicedResult(BaseRoughResult):
         To add gridding lines.
 
         Modified for a sliced model to only add grid lines of non-sliced interfaces.
-        You can apply `BaseResult._add_gridding_to_XEFI` to the result if you want
+        You can apply `BaseResult._add_XEFI_gridding` to the result if you want
         to grid the sliced layers.
 
         Grid lines can be added for specified:
@@ -371,7 +371,7 @@ class SlicedResult(BaseRoughResult):
                         )
 
     @override
-    def _add_rough_gridding_to_XEFI(
+    def _add_XEFI_roughness(
         self,
         ax: mplAxes,
         l_index: int | None = None,
@@ -389,20 +389,22 @@ class SlicedResult(BaseRoughResult):
         m_index : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
         """
-        z = self.pre_z
-        zr = self.z_roughness
-
         x_selection, x_data, _ = self._require_singular_x_data(
             l_index=l_index,
             m_index=m_index,
         )
-
         if x_selection is None:
             raise ValueError(
                 "Requires a singular dependent variable (theta or energy)."
             )
+        # Take the pre-sliced interfaces for roughness gridding, not the sliced interfaces.
+        z = self.pre_z
+
         if z is None:
             raise ValueError("`z` is not defined.")
+
+        # Non-sliced interfaces with roughness gridding.
+        zr = self.z_roughness
         if zr is None:
             raise ValueError("`z_roughness` is not defined on the result.")
         for i, zi in enumerate(z):

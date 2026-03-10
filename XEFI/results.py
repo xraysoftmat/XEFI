@@ -2,11 +2,12 @@
 A module for basic result handling in XEFI.
 """
 
-from typing import Literal, TypeVar, override, Iterable
+from typing import Any, Literal, TypeVar, override, Iterable
 from abc import ABCMeta
 from enum import Enum
 import warnings
 
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 import numpy.typing as npt
 
@@ -16,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure as mplFig, SubFigure as mplSubFig
 from matplotlib.axes import Axes as mplAxes
 from matplotlib.colors import Colormap, LogNorm, Normalize
+
 #     has_mpl = True
 # except ImportError:
 #     has_mpl = False
@@ -216,7 +218,9 @@ class BaseResult(metaclass=ABCMeta):
         Sometimes energies (L) or angles (M) may be singular, and can be squeezed.
         """
         if self.X is not None:
-            self.X = np.squeeze(self.X)[()]
+            self.X = np.squeeze(self.X)[
+                ()
+            ]  # Allows 0-d arrays to be converted to scalars.
         if self.R is not None:
             self.R = np.squeeze(self.R)[()]
         if self.T is not None:
@@ -282,7 +286,7 @@ class BaseResult(metaclass=ABCMeta):
             L = 1
 
         # Ensure z_vals is a numpy array
-        z_vals = np.asarray(z_vals, dtype=np.float64)
+        z_vals = np.atleast_1d(np.asarray(z_vals, dtype=np.float64))
 
         # Find the indices of z_vals in self.z
         z0 = self.z
@@ -457,8 +461,9 @@ class BaseResult(metaclass=ABCMeta):
         .. math::
             I(z) = |E(z)|^2 = E(z) \cdot E^*(z)
 
-        The summed electric field intensity result has dimensions (L, M), where L is the number
-        of z-coordinates and M (`self.M`) is the number of angles of incidence in `self.theta`.
+        The summed electric field intensity result has dimensions (L, M),
+        where L (`self.L`) is the number of energies in `self.energies`
+        and M (`self.M`) is the number of angles of incidence in `self.theta`.
 
         Parameters
         ----------
@@ -470,14 +475,120 @@ class BaseResult(metaclass=ABCMeta):
         Returns
         -------
         npt.NDArray[np.floating]
-            The summed electric field intensity at the specified z-coordinates and angle theta.
+            The summed electric field intensity for each energy and angle theta.
             Dimensions are (L, M), unless L or M are singular, in which case the dimension is
             flattened.
         """
         intensity = self.electric_field_intensity(z_vals)
-        return BaseResult._sum_field_intensity(
+        return self._sum_field_intensity(
             intensity, bounds=bounds, z_vals=np.asarray(z_vals)
         )
+
+    # def ray_pathlengths(
+    #     self,
+    #     z_vals: npt.ArrayLike,
+    #     iterations: int = 10,
+    # ) -> npt.NDArray:
+    #     """
+    #     Generate a ray path mapping for the structure.
+
+    #     Dimensions match the energies (L), angles of incidence (M) and layers (N+1).
+
+    #     Parameters
+    #     ----------
+    #     z_vals : npt.ArrayLike
+    #         The z-coordinates at which to calculate the ray path in angstroms (Å).
+    #     iterations : int, optional
+    #         The number of iterations to perform for the ray tracing.
+    #         More iterations may improve accuracy for complex structures.
+    #         Default is 10.
+
+    #     Returns
+    #     -------
+    #     ray_path : npt.NDArray
+    #         A 2D array representing the ray path map.
+    #         Shape is (L, M, N+1), unless L or M are singular, in which case the dimension is flattened.
+    #     ray_populations : npt.NDArray
+    #         A 2D array representing the population found across each dimension.
+    #         Shape is (L, M, N+1), unless L or M are singular, in which case the dimension is flattened.
+    #     """
+    #     z_vals = np.atleast_1d(np.array(z_vals, dtype=np.float64))
+
+    #     L, M, N = self.L, self.M, self.N
+    #     assert L is not None and M is not None and N is not None, (
+    #         "L, M, and N must be defined."
+    #     )
+
+    #     # Fresnel Coefficients
+    #     fresnel_r = self.fresnel_r
+    #     fresnel_t = self.fresnel_t
+    #     assert fresnel_r is not None and fresnel_t is not None, (
+    #         "Fresnel coefficients must be defined."
+    #     )
+
+    #     # Angles
+    #     angles = self.angles_of_incidence
+    #     assert angles is not None, "Angles of incidence must be defined."
+
+    #     # Get the wavevectors
+    #     wavevectors = self.wavevectors
+    #     assert wavevectors is not None, "Wavevectors must be defined."
+    #     # Re-add squeezed dimensions if necessary
+    #     if L == 1:
+    #         wavevectors = wavevectors[np.newaxis, :]
+    #         fresnel_r = fresnel_r[np.newaxis, :]
+    #         fresnel_t = fresnel_t[np.newaxis, :]
+    #     if M == 1:
+    #         wavevectors = wavevectors[:, np.newaxis, :]
+    #         fresnel_r = fresnel_r[:, np.newaxis, :]
+    #         fresnel_t = fresnel_t[:, np.newaxis, :]
+
+    #     # We now need to iterate over each layer and find the populations
+    #     p0 = np.zeros(
+    #         (L, M, N, iterations, 2)
+    #     )  # Initial transmission/reflection at z=0
+    #     """
+    #     The population array has dimensions (L, M, N, iterations, 2), where the last dimension
+    #     represents the downward (0) and upward (1) propagating populations.
+    #     """
+    #     # We also need to keep track of the ray path, which is the layer index at each z-value for each iteration.
+    #     path0 = np.zeros((L, M, N, iterations, 2), dtype=int)  # Initial path at z=0
+
+    #     # Initialize the population at the first layer and iteration
+    #     p0[:, :, 0, 0, 0] = (
+    #         1  # Start with all population in the first layer at iteration 0
+    #     )
+
+    #     # Iterate
+    #     for it in range(1, iterations):
+    #         for i in range(
+    #             min(it, N)
+    #         ):
+    #             # Process each interface up to the current iteration - never need to process beyond as no population there.
+    #             # ...
+    #             # Get the forward propogating transmission population from the previous iteration
+    #             pt = p0[
+    #                 :, :, i, it - 1, 0
+    #             ]
+    #             # Get the return reflection population from the previous iteration at the next layer
+    #             pr = p0[
+    #                 :, :, i + 1, it - 1, 1
+    #             ]
+
+    #             # Determine the interface populations
+    #             fr_R = np.abs(fresnel_r[:, :, i] ** 2)  # Reflectivity
+
+    #             # Calculate the new populations at this iteration
+    #             p0[:, :, i, it, 1] += pt * fr_R  # Forward propogating reflection
+    #             p0[:, :, i + 1, it, 0] += pt * (1 - fr_R)  # Forward propogating transmission
+    #             p0[:, :, i + 1, it, 1] += pr * fr_R  # Return propogating reflection
+    #             p0[:, :, i, it, 0] += pr * (1 - fr_R)  # Return propogating transmission
+
+    #             # Add the population normalised path information for each layer
+
+    #             path0[:, :, i, it] += self.z[i] / np.abs(np.sin(self.angles_of_incidence[i].real))  # If there is a forward reflection, add to path
+
+    #     return np.squeeze(ray_path), np.squeeze(ray_populations)
 
     def _require_singular_x_data(
         self,
@@ -562,12 +673,13 @@ class BaseResult(metaclass=ABCMeta):
 
         return x_selection, x_data, critical_angles
 
-    def generate_pretty_figure_XEFI(
+    def generate_graphic_XEFI_map(
         self,
         z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
         fig: mplFig | mplSubFig | None = None,
         ax: mplAxes | None = None,
-        cbar_loc: Literal["fig", "ax"] = "fig",
+        cbar_loc: Literal["fig", "ax", "cbar_ax"] = "fig",
+        cbar_ax: mplAxes | None = None,
         cmap: Colormap = plt.get_cmap("viridis"),
         norm: Literal["linear", "log"] | Normalize = "linear",
         l_index: int | None = None,
@@ -577,8 +689,6 @@ class BaseResult(metaclass=ABCMeta):
         grid_z: bool = True,
         grid_labels: bool = True,
         grid_crit: bool = True,
-        # sum: bool = False,  # TODO: Add this code.
-        # sum_bounds: tuple[float, float] | None = None,
     ) -> tuple[mplFig | mplSubFig, mplAxes]:
         """
         Generate a pretty 2D plot of the X-ray electric field intensity as a function of depth.
@@ -596,9 +706,13 @@ class BaseResult(metaclass=ABCMeta):
             The matplotlib figure to use for the plot. If None, a new figure is created.
         ax : Axes | None, optional
             The matplotlib axes to use for the plot. If None, a new axes is created.
-        cbar_loc : Literal["fig", "ax"], optional
+        cbar_loc : Literal["fig", "ax", "cbar_ax"], optional
             The location of the colorbar. If "fig", the colorbar is padded to the right of the figure;
-            if "ax", it is padded to the right of the axes. Defaults to "fig".
+            if "ax", it is padded to the right of the axes; if "cbar_ax", it is placed in a separate axes.
+            Defaults to "fig".
+        cbar_ax : Axes | None, optional
+            The matplotlib axes to use for the colorbar. Only used if `cbar_loc` is "cbar_ax", and requires
+            a provided axes. Overrides `cbar_loc` if provided. Defaults to None.
         cmap : Colormap, optional
             The colormap to use for the plot. Defaults to matplotlib's "viridis".
         norm : Literal["linear", "log"] | matplotlib.colors.Normalize, optional
@@ -619,6 +733,10 @@ class BaseResult(metaclass=ABCMeta):
             Whether to plot the z layer labels. Defaults to True.
         grid_crit : float, optional
             Whether to plot the critical angles grid. Defaults to True.
+        use_rc_params : bool, optional
+            Whether to use matplotlib's rcParams for styling the plot. Defaults to False.
+        font_scaling : float, optional
+            A scaling factor for the font size of the plot features. Defaults to 1.0 (no scaling).
 
         Returns
         -------
@@ -626,9 +744,13 @@ class BaseResult(metaclass=ABCMeta):
             A tuple containing the matplotlib figure and axes used for the plot.
         """
         if fig is None and ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=300)
+            fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=200)
         elif fig is None and ax is not None:
             fig = ax.figure
+        elif fig is not None and ax is not None:
+            assert ax in fig.axes, (
+                "The provided axes is not part of the provided figure."
+            )
         else:
             # fig is not None and ax is None
             assert fig is not None
@@ -665,7 +787,81 @@ class BaseResult(metaclass=ABCMeta):
         # Calculate the electric field intensity at the specified z-coordinates
         intensity: npt.NDArray[np.floating] = self(plot_z)
 
-        # Generate a normalisation
+        self._add_XEFI_mesh(
+            x_data=x_data,
+            plot_z=plot_z,
+            intensity=intensity,
+            fig=fig,
+            ax=ax,
+            x_selection=x_selection,
+            cmap=cmap,
+            norm=norm,
+            angles_in_deg=angles_in_deg,
+            cbar_loc=cbar_loc,
+            cbar_ax=cbar_ax,
+        )
+
+        self._add_XEFI_gridding(
+            ax=ax,
+            l_index=l_index,
+            m_index=m_index,
+            grid_z=grid_z,
+            grid_labels=grid_labels,
+            grid_crit=grid_crit,
+            labels=labels,
+        )
+
+        return fig, ax
+
+    @staticmethod
+    def _add_XEFI_mesh(
+        x_data: npt.NDArray[np.floating],
+        plot_z: npt.NDArray[np.floating],
+        intensity: npt.NDArray[np.floating],
+        fig: mplFig | mplSubFig,
+        ax: mplAxes,
+        x_selection: Literal["theta", "energy"],
+        cmap: Colormap = plt.get_cmap("viridis"),
+        norm: Literal["linear", "log"] | Normalize = "linear",
+        angles_in_deg: bool = True,
+        cbar_loc: Literal["fig", "ax", "cbar_ax"] = "fig",
+        cbar_ax: mplAxes | None = None,
+    ) -> None:
+        """
+        Create elements for the X-ray electric field intensity plot.
+
+        Inclues the pcolormesh, axis labels, title and colorbar.
+
+        Parameters
+        ----------
+        x_data : npt.NDArray[np.floating]
+            The data for the x-axis, either `theta` or `energy`.
+        plot_z : npt.NDArray[np.floating]
+            The z-coordinates at which to plot the electric field intensity.
+        intensity : npt.NDArray[np.floating]
+            The electric field intensity values to plot, with dimensions matching `x_data` and `plot_z`.
+        fig : Figure | SubFigure
+            The matplotlib figure to use for the plot.
+        ax : Axes
+            The matplotlib axes to use for the plot.
+        x_selection : Literal["theta", "energy"]
+            The type of data selected for the x-axis, either "theta" or "energy".
+        cmap : Colormap, optional
+            The colormap to use for the plot. Defaults to matplotlib's "viridis".
+        norm : Literal["linear", "log"] | matplotlib.colors.Normalize, optional
+            The normalization to use for the colormap. If "linear", uses a linear normalization;
+            if "log", uses a logarithmic normalization. Defaults to "linear".
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
+        cbar_loc : Literal["fig", "ax", "cbar_ax"], optional
+            The location of the colorbar. If "fig", the colorbar is padded to the right of the figure;
+            if "ax", it is padded to the right of the axes. If "cbar_ax", it is added to the provided
+            `cbar_ax`. Defaults to "fig".
+        cbar_ax : Axes | None, optional
+            The matplotlib axes to use for the colorbar. Only used if `cbar_loc` is "cbar_ax",
+            and requires a provided axes.
+        """
+        # Generate a normalisation if not provided, based on the intensity values and the specified normalization type.
         norm_fn: Normalize | LogNorm
         if norm == "linear":
             norm_fn = Normalize(vmin=intensity.min(), vmax=intensity.max())
@@ -698,26 +894,25 @@ class BaseResult(metaclass=ABCMeta):
 
         # Add a colorbar
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm_fn)
+        if cbar_ax is not None and cbar_loc != "cbar_ax":
+            cbar_loc = "cbar_ax"  # Override to use provided axes
+            warnings.warn(
+                "A `cbar_ax` was provided but `cbar_loc` was not set to 'cbar_ax'. Overriding `cbar_loc` to 'cbar_ax'."
+            )
         if cbar_loc == "fig":
             fig.colorbar(sm, ax=fig.axes, label="Electric Field Intensity (A.U.)")
         elif cbar_loc == "ax":
             fig.colorbar(sm, cax=ax, label="Electric Field Intensity (A.U.)")
+        elif cbar_loc == "cbar_ax":
+            if cbar_ax is None:
+                raise ValueError(
+                    "`cbar_ax` must be provided when `cbar_loc` is 'cbar_ax'."
+                )
+            plt.colorbar(sm, cax=cbar_ax, label="Electric Field Intensity (A.U.)")
         else:
             raise ValueError("`cbar_loc` must be either 'fig' or 'ax'.")
 
-        self._add_gridding_to_XEFI(
-            ax=ax,
-            l_index=l_index,
-            m_index=m_index,
-            grid_z=grid_z,
-            grid_labels=grid_labels,
-            grid_crit=grid_crit,
-            labels=labels,
-        )
-
-        return fig, ax
-
-    def _add_gridding_to_XEFI(
+    def _add_XEFI_gridding(
         self,
         ax: mplAxes,
         l_index: int | None = None,
@@ -725,7 +920,9 @@ class BaseResult(metaclass=ABCMeta):
         grid_z: bool = True,
         grid_labels: bool = True,
         grid_crit: bool = True,
+        grid_kwargs: dict | None = None,
         labels: list[str] | None = None,
+        label_kwargs: dict | None = None,
     ) -> None:
         """
         To add gridding lines.
@@ -753,8 +950,14 @@ class BaseResult(metaclass=ABCMeta):
             Whether to plot the z layer labels. Defaults to True.
         grid_crit : float, optional
             Whether to plot the critical angles grid. Defaults to True.
+        grid_kwargs : dict | None, optional
+            Additional keyword arguments to pass to the grid line plotting function.
+            If None, defaults to an empty dictionary.
         labels : list[str] | None, optional
             The labels for the z layers. If None, defaults to automatic labels.
+        label_kwargs : dict | None, optional
+            Additional keyword arguments to pass to the label plotting function.
+            If None, defaults to an empty dictionary.
         """
 
         N, z = self.N, self.z
@@ -774,10 +977,25 @@ class BaseResult(metaclass=ABCMeta):
                 labels = result_labels
             else:
                 labels = [f"Layer {i}" for i in range(N + 1)]
+
+        # Update keywords
+        gkwargs = {
+            "color": "white",
+            "linestyle": "--",
+            "alpha": 0.2,
+            "linewidth": 0.5,
+        }
+        gkwargs.update(grid_kwargs or {})
+        lkwargs = {
+            "color": "white",
+            "alpha": 0.7,
+            "transform": ax.get_yaxis_transform(),
+        }
+
         # Layers:
         if grid_z:
             for zi in z:
-                ax.axhline(zi, color="white", linestyle="--", alpha=0.2, linewidth=0.5)
+                ax.axhline(zi, **gkwargs)
             if grid_labels and labels is not None:
                 for i, zi in enumerate(z):
                     name = labels[i + 1]
@@ -785,48 +1003,328 @@ class BaseResult(metaclass=ABCMeta):
                         x=1.0,
                         y=zi,
                         s=name,
-                        transform=ax.get_yaxis_transform(),
                         ha="right",
                         va="top",
-                        color="white",
+                        **lkwargs,
                     )
                 ax.text(
                     x=1.0,
                     y=z[0],
                     s=labels[0],
-                    transform=ax.get_yaxis_transform(),
                     ha="right",
                     va="bottom",
-                    color="white",
+                    **lkwargs,
                 )
 
-        # Critical Angles
-        if (
-            grid_crit and x_selection == "theta" and critical_angles is not None
-        ):  # Is a angle plot.
-            for ang in critical_angles:
-                if ang > x_data.min() and ang < x_data.max():
-                    ax.axvline(
-                        x=ang, color="white", linestyle="--", alpha=0.2, linewidth=0.5
-                    )
-            if grid_labels and labels is not None:
-                for i, ang in enumerate(critical_angles):
-                    if ang > x_data.min() and ang < x_data.max():
-                        name = labels[i + 1]
-                        ax.text(
-                            x=ang,
-                            y=0.00,
-                            s=name,
-                            transform=ax.get_xaxis_transform(),
-                            color="white",
-                            ha="center",
-                        )
+        if grid_crit and x_selection == "theta" and critical_angles is not None:
+            self._add_crit_angles(
+                ax=ax,
+                angles=x_data,
+                vline_kwargs=gkwargs,
+                label_kwargs=lkwargs,
+            )
 
-    def generate_pretty_figure(
+    def generate_graphic_XEFI_summed(
         self,
         z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
         fig: mplFig | mplSubFig | None = None,
         ax: mplAxes | None = None,
+        l_index: int | None = None,
+        m_index: int | None = None,
+        angles_in_deg: bool = True,
+        bounds: tuple[float | int, float | int]
+        | list[tuple[float | int, float | int]]
+        | None = None,
+        bounds_labels: list[str] | None = None,
+        grid_crit: bool = True,
+        grid_crit_labels: bool = True,
+    ) -> tuple[mplFig | mplSubFig, mplAxes]:
+        """
+        Generate a pretty 2D plot of the summed X-ray electric field intensity as a function of depth.
+
+        The second dimension is either `theta` (angle of incidence) or `beam_energy`.
+        This dimension is automatically chosen if one of the dimensions is singular (i.e., has length 1).
+        Otherwise, the user must specify either `m_index` or `l_index` to choose a singular index.
+
+        Parameters
+        ----------
+        z_vals : npt.NDArray[np.floating] | list[float | int] | None, optional
+            The z-coordinates at which to calculate the electric field intensity, in angstroms (Å).
+            If None, uses the z-coordinates from the result object, with 10% padding.
+        fig : Figure | SubFigure | None, optional
+            The matplotlib figure to use for the plot. If None, a new figure is created.
+        ax : Axes | None, optional
+            The matplotlib axes to use for the plot. If None, a new axes is created.
+        l_index : int | None, optional
+            A singular index to consider for the beam energies. Defaults to None.
+        m_index : int | None, optional
+            A singular index to consider for the angles of incidence. Defaults to None.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
+        bounds : tuple[float | int, float | int] | list[tuple[float | int, float | int]] | None, optional
+            The z-axis summation bounds to apply, for different intensity lines.
+        bounds_labels : list[str] | None, optional
+            The labels for the different bounds. Requires `bounds` to be specified as a list,
+            with the same length. If None, defaults to automatic labels.
+        grid_crit : bool, optional
+            Whether to plot the critical angles grid. Defaults to True.
+        grid_crit_labels : bool, optional
+            Whether to plot the critical angle labels. Defaults to True.
+
+        Returns
+        -------
+        tuple[Figure | SubFigure, Axes]
+            A tuple containing the matplotlib figure and axes used for the plot.
+        """
+        if fig is None and ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(6, 3), dpi=200)
+            # Use N locators for the x-axis
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+        elif fig is None and ax is not None:
+            fig = ax.figure
+        elif fig is not None and ax is not None:
+            assert ax in fig.axes, (
+                "The provided axes is not part of the provided figure."
+            )
+        else:
+            # fig is not None and ax is None
+            assert fig is not None
+            ax = fig.add_subplot(1, 1, 1)
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+        # Ensure L or M is singular for 2D plotting.
+        N = self.N
+        x_selection: Literal["theta", "energy"] | None
+        x_data: npt.NDArray[np.floating] | None
+
+        # Get the sliced x-data.
+        x_selection, x_data, _ = self._require_singular_x_data(
+            m_index=m_index,
+            l_index=l_index,
+        )
+
+        plot_z: npt.NDArray[np.float64]
+        z = self.z
+        assert z is not None and N is not None and len(z) == N, (
+            "Interface z-coordinates (self.z) must be set before generating the figure."
+        )
+        if z_vals is None:
+            # Create a linspace of the z-coordinates with 10% padding
+            width = abs(z[-1] - z[0])
+            plot_z = np.linspace(
+                z[0] - 0.1 * width,
+                z[-1] + 0.1 * width,
+                1000,
+                dtype=np.float64,
+            )
+        else:
+            plot_z = np.asarray(z_vals, dtype=np.float64)
+
+        # Create summed intensity
+        intensity_profiles = []
+        intensity_labels = []
+        if bounds is not None:
+            if isinstance(bounds, tuple):
+                bounds = [bounds]  # Convert to list for consistent processing
+            for i, b in enumerate(bounds):
+                intensity_profiles.append(self.summed_intensity(plot_z, bounds=b))
+                label = (
+                    bounds_labels[i]
+                    if bounds_labels is not None and i < len(bounds_labels)
+                    else (
+                        rf"$\sum\nolimits_{{z={b[0]:0.1f}}}^{{z={b[1]:0.1f}}} \mathcal{{I}}$"
+                        if plt.rcParams["text.usetex"] is True
+                        else rf"$\sum\mathcal{{I}}$ (${{z={b[0]:0.1f}}}\to{{{b[1]:0.1f}}}$ Å) "
+                    )
+                )
+                intensity_labels.append(label)
+            ax.legend()
+        else:
+            intensity_profiles.append(self.summed_intensity(plot_z))
+            intensity_labels.append(
+                (
+                    rf"$\sum\nolimits_{{z={plot_z.min():0.1f}}}^{{z={plot_z.max():0.1f}}} \mathcal{{I}}$"
+                    if plt.rcParams["text.usetex"] is True
+                    else rf"$\sum\mathcal{{I}}$ (${{z={plot_z.min():0.1f}}}\to{{{plot_z.max():0.1f}}}$ Å) "
+                )
+            )
+
+        self._add_XEFI_summed_intensity(
+            ax=ax,
+            x_selection=x_selection,
+            x_data=x_data,
+            intensity_profiles=intensity_profiles,
+            intensity_labels=intensity_labels,
+            grid_crit=grid_crit,
+            grid_crit_labels=grid_crit_labels,
+            angles_in_deg=angles_in_deg,
+        )
+
+        return fig, ax
+
+    def _add_XEFI_summed_intensity(
+        self,
+        ax: mplAxes,
+        x_selection: Literal["theta", "energy"],
+        x_data: npt.NDArray[np.floating],
+        intensity_profiles: list[npt.NDArray[np.floating]],
+        intensity_labels: list[str],
+        grid_crit: bool = True,
+        grid_crit_labels: bool = True,
+        angles_in_deg: bool = True,
+    ) -> None:
+        """
+        Add line plots for the summed X-ray electric field intensity.
+
+        Parameters
+        ----------
+        ax : Axes
+            The matplotlib axes to add the line plots.
+        x_selection : Literal["theta", "energy"]
+            The type of data selected for the x-axis, either "theta" or "energy".
+        x_data : npt.NDArray[np.floating]
+            The data for the x-axis, either `theta` or `energy`.
+        intensity_profiles : list[npt.NDArray[np.floating]]
+            A list of electric field intensity profiles to plot, with dimensions matching `x_data`.
+        intensity_labels : list[str]
+            The label for each intensity profile to plot.
+        bounds : tuple[float | int, float | int] | list[tuple[float | int, float | int]] | None, optional
+            The bounds for summing the intensity map. Defaults to None.
+        bounds_labels : list[str] | None, optional
+            The labels for each summed intensity line plot. Defaults to None.
+        grid_crit : bool, optional
+            Whether to plot the critical angles grid. Defaults to True.
+        grid_crit_labels : bool, optional
+            Whether to plot the critical angle labels. Defaults to True.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
+        """
+        # Plot the intensity profiles
+        for intensity, label in zip(intensity_profiles, intensity_labels):
+            ax.plot(x_data, intensity, label=label)
+
+        if x_selection == "theta" and grid_crit is True:
+            # Add vertical lines for the critical angles
+            self._add_crit_angles(
+                ax=ax,
+                angles=x_data,
+                angle_labels=None,
+                angles_in_deg=angles_in_deg,
+                add_labels=grid_crit_labels,
+            )
+
+        ax.set_xlabel(
+            f"Angle of Incidence ({'degrees' if angles_in_deg else 'radians'})"
+            if x_selection == "theta"
+            else "Energy (eV)"
+        )
+        ax.set_ylabel("Summed XEFI (A.U.)")
+        ax.set_yscale("log")
+        ax.legend()
+
+    def _add_crit_angles(
+        self,
+        ax: mplAxes,
+        angles: npt.NDArray[np.floating],
+        angle_labels: list[str] | None = None,
+        angles_in_deg: bool = True,
+        add_labels: bool = True,
+        vline_kwargs: dict[str, Any] = {},
+        label_kwargs: dict[str, Any] = {},
+    ):
+        """
+        Add matplotlib hlines representing layer critical angles.
+
+        Gridding is added to the axis plot, within the provided x_data limits.
+
+        Parameters
+        ----------
+        ax : mplAxes
+            The matplotlib axes to add the critical angle gridding.
+        angles : npt.NDArray[np.floating]
+            Angles of incidence, to consider for each critical angle.
+        angle_labels : list[str] | None
+            The labels for each critical angle. Defaults to None.
+        angles_in_deg : bool
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
+        add_labels : bool
+            Whether to add labels for each critical angle. Defaults to True.
+            If `angle_labels` is not provided, layer names will be used as labels.
+            If layer names are not available, generic labels will be used.
+        vline_kwargs : dict[str, Any], optional
+            Additional keyword arguments to pass to `ax.axvline` for styling the critical angle lines. Defaults to {}.
+        label_kwargs : dict[str, Any], optional
+            Additional keyword arguments to pass to `ax.text` for styling the critical angle labels. Defaults to {}.
+        """
+        vl_args = {
+            "color": "black",
+            "linestyle": "--",
+            "alpha": 0.2,
+            "linewidth": 0.5,
+        }
+        vl_args.update(vline_kwargs)
+        label_args = {
+            "color": "black",
+            "alpha": 0.5,
+            "ha": "center",
+            "va": "top",
+            "transform": ax.get_xaxis_transform(),
+        }
+        label_args.update(label_kwargs)
+
+        crits = self.critical_angles_deg if angles_in_deg else self.critical_angles
+        if crits is not None:
+            for ang in crits:
+                if ang > angles.min() and ang < angles.max():
+                    ax.axvline(x=ang, **vl_args)
+            if angle_labels is None:
+                angle_labels = self.layer_names
+                angle_labels = (
+                    angle_labels[1:] if angle_labels is not None else None
+                )  # Use layer names, excluding the first layer which is typically the ambient layer.
+            if angle_labels is None:
+                angle_labels = [f"Layer {i}" for i in range(len(crits) + 1)]
+
+            if angle_labels is not None and add_labels:
+                for i, ang in enumerate(crits):
+                    if ang > angles.min() and ang < angles.max():
+                        name = (
+                            angle_labels[i]
+                            if i < len(angle_labels)
+                            else f"Critical Angle {i + 1}"
+                        )
+                        ax.text(x=ang, y=0.99, s=name, **label_args)
+                ax.text(
+                    x=np.average(crits) if len(crits) > 0 else angles.mean(),
+                    y=1.01,
+                    s="Critical Angles",
+                    transform=ax.get_xaxis_transform(),
+                    color="black",
+                    alpha=0.5,
+                    ha="center",
+                    va="bottom",
+                )
+
+    def generate_graphic_XEFI(
+        self,
+        z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
+        fig: mplFig | mplSubFig | None = None,
+        ax: mplAxes | None = None,
+        cbar_loc: Literal["fig", "ax", "cbar_ax"] = "fig",
+        cbar_ax: mplAxes | None = None,
+        line_ax: mplAxes | None = None,
+        cmap: Colormap = plt.get_cmap("viridis"),
+        norm: Literal["linear", "log"] | Normalize = "linear",
+        l_index: int | None = None,
+        m_index: int | None = None,
+        labels: list[str] | None = None,
+        angles_in_deg: bool = True,
+        grid_z: bool = True,
+        grid_labels: bool = True,
+        grid_crit: bool = True,
+        bounds: tuple[float | int, float | int]
+        | list[tuple[float | int, float | int]]
+        | None = None,
+        bounds_labels: list[str] | None = None,
     ) -> tuple[mplFig | mplSubFig, mplAxes]:
         """
         Generate a pretty plot of the XEFI intensity, and the summed XEFI intensity within each layer.
@@ -836,12 +1334,48 @@ class BaseResult(metaclass=ABCMeta):
         Parameters
         ----------
         z_vals : npt.NDArray[np.floating] | list[float | int] | None, optional
-            The z-coordinates at which to calculate the electric field intensity.
+            The z-coordinates at which to calculate the electric field intensity, in angstroms (Å).
             If None, uses the z-coordinates from the result object, with 10% padding.
         fig : Figure | SubFigure | None, optional
             The matplotlib figure to use for the plot. If None, a new figure is created.
         ax : Axes | None, optional
             The matplotlib axes to use for the plot. If None, a new axes is created.
+        cbar_loc : Literal["fig", "ax", "cbar_ax"], optional
+            The location of the colorbar. If "fig", the colorbar is padded to the right of the figure;
+            if "ax", it is padded to the right of the axes; if "cbar_ax", it is placed in a separate axes.
+            Defaults to "fig".
+        cbar_ax : Axes | None, optional
+            The matplotlib axes to use for the colorbar. Only used if `cbar_loc` is "cbar_ax", and requires
+            a provided axes. Overrides `cbar_loc` if provided. Defaults to None.
+        line_ax : Axes | None, optional
+            An matplotlib axes to use for plotting the summed intensity as a line plot.
+            If None, a new axes is created and the figure is adjusted to accommodate both the line plot and the color mesh.
+            Use `generate_pretty_figure_XEFI` if you do not want to plot the summed intensity as a line plot. Defaults to None.
+        cmap : Colormap, optional
+            The colormap to use for the plot. Defaults to matplotlib's "viridis".
+        norm : Literal["linear", "log"] | matplotlib.colors.Normalize, optional
+            The normalization to use for the colormap. If "linear", uses a linear normalization;
+            if "log", uses a logarithmic normalization. Defaults to "linear".
+            Can also provide a custom normalization object.
+        l_index : int | None, optional
+            A singular index to consider for the beam energies. Defaults to None.
+        m_index : int | None, optional
+            A singular index to consider for the angles of incidence. Defaults to None.
+        labels : list[str] | None, optional
+            The labels for the z layers. If None, defaults to automatic labels.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
+        grid_z : bool, optional
+            Whether to plot the layer grid. Defaults to True.
+        grid_labels : bool, optional
+            Whether to plot the z layer labels. Defaults to True.
+        grid_crit : float, optional
+            Whether to plot the critical angles grid. Defaults to True.
+        bounds : tuple[float | int, float | int] | list[tuple[float | int, float | int]] | None, optional
+            The z-axis summation bounds to apply, for different intensity lines in the line plot.
+        bounds_labels : list[str] | None, optional
+            The labels for the different bounds in the line plot. Requires `bounds` to be specified as a list,
+            with the same length. If None, defaults to automatic labels.
 
         Returns
         -------
@@ -850,14 +1384,110 @@ class BaseResult(metaclass=ABCMeta):
         ax : Axes
             The matplotlib axes containing the plot.
         """
-        if fig is None and ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=300)
-        elif fig is None and ax is not None:
+        if fig is None and ax is None and line_ax is None:
+            fig, axes = plt.subplots(2, 2, figsize=(10, 4), dpi=300)
+            ax = axes[0, 0]
+            cbar_ax = axes[0, 1]
+            line_ax = axes[1, 0]
+            axes[1, 1].axis("off")  # Turn off the unused subplot
+        elif fig is None and ax is not None and line_ax is not None:
             fig = ax.figure
+            assert line_ax.figure == fig, (
+                "The provided line_ax is not part of the same figure as the provided ax."
+            )
+        elif fig is not None and ax is not None and line_ax is not None:
+            assert ax in fig.axes, (
+                "The provided axes is not part of the provided figure."
+            )
+            assert line_ax in fig.axes, (
+                "The provided line_ax is not part of the provided figure."
+            )
         else:
             # fig is not None and ax is None
             assert fig is not None
-            ax = fig.add_subplot(1, 1, 1)
+            assert fig.axes == [], (
+                "If providing a figure without axes, the figure must not contain any axes."
+            )
+            ax = fig.add_subplot(2, 2, 1)
+            cbar_ax = fig.add_subplot(2, 2, 2)
+            line_ax = fig.add_subplot(2, 1, 2)
+
+        # Ensure L or M is singular for 2D plotting.
+        N = self.N
+        x_selection: Literal["theta", "energy"] | None
+        x_data: npt.NDArray[np.floating] | None
+
+        # Get the sliced x-data.
+        x_selection, x_data, _ = self._require_singular_x_data(
+            m_index=m_index,
+            l_index=l_index,
+        )
+
+        plot_z: npt.NDArray[np.float64]
+        z = self.z
+        assert z is not None and N is not None and len(z) == N, (
+            "Interface z-coordinates (self.z) must be set before generating the figure."
+        )
+        if z_vals is None:
+            # Create a linspace of the z-coordinates with 10% padding
+            width = abs(z[-1] - z[0])
+            plot_z = np.linspace(
+                z[0] - 0.1 * width,
+                z[-1] + 0.1 * width,
+                1000,
+                dtype=np.float64,
+            )
+        else:
+            plot_z = np.asarray(z_vals, dtype=np.float64)
+
+        # Calculate the electric field intensity at the specified z-coordinates
+        intensity: npt.NDArray[np.floating] = self(plot_z)
+
+        self._add_XEFI_mesh(
+            x_data=x_data,
+            plot_z=plot_z,
+            intensity=intensity,
+            fig=fig,
+            ax=ax,
+            x_selection=x_selection,
+            cmap=cmap,
+            norm=norm,
+            angles_in_deg=angles_in_deg,
+            cbar_loc=cbar_loc,
+            cbar_ax=cbar_ax,
+        )
+
+        self._add_XEFI_gridding(
+            ax=ax,
+            l_index=l_index,
+            m_index=m_index,
+            grid_z=grid_z,
+            grid_labels=grid_labels,
+            grid_crit=grid_crit,
+            labels=labels,
+        )
+
+        self.generate_graphic_XEFI_summed(
+            z_vals=z_vals,
+            ax=line_ax,
+            l_index=l_index,
+            m_index=m_index,
+            angles_in_deg=angles_in_deg,
+            grid_crit=grid_crit,
+            grid_crit_labels=False,  # Avoid duplicate critical angle labels on the line plot, since they are already labeled on the mesh plot.
+            bounds=bounds,
+            bounds_labels=bounds_labels,
+        )
+        # Force the x-limits of the line_ax to match those of the mesh ax, to ensure alignment of the critical angle gridding.
+        line_ax.set_xlim(ax.get_xlim())
+
+        # Touching up
+        ax.set_xlabel(
+            ""
+        )  # Remove the x-label from the mesh plot, since it is shared with the line plot.
+        ax.set_xticklabels(
+            []
+        )  # Remove the x-ticks labels from the mesh plot, since they are shared with the line plot.
 
         return fig, ax
 
@@ -1057,32 +1687,59 @@ class BaseResult(metaclass=ABCMeta):
             plot_kwargs = {}
         plot_kwargs.update(kwargs)
         theta = self.theta if not angles_in_deg else self.theta_deg
-        for l_index in range(L):
+        if L == 1 and M > 1:
             for i in indices:
                 ax_re.plot(
                     theta,
-                    self.fresnel_r[l_index, :, i].real,
-                    label=f"Fr R_{{{i},{i + 1}}} (Re)",
+                    self.fresnel_r[:, i].real,
+                    label=f"Fr $R_{{{i},{i + 1}}}$s (Re)",
                     **plot_kwargs,
                 )
                 ax_im.plot(
                     theta,
-                    self.fresnel_r[l_index, :, i].imag,
-                    label=f"Fr R_{{{i},{i + 1}}} (Im)",
+                    self.fresnel_r[:, i].imag,
+                    label=f"Fr $R_{{{i},{i + 1}}}$ (Im)",
                     **plot_kwargs,
                 )
                 ax_re.plot(
                     theta,
-                    self.fresnel_t[l_index, :, i].real,
-                    label=f"Fr T_{{{i},{i + 1}}} (Re)",
+                    self.fresnel_t[:, i].real,
+                    label=f"Fr $T_{{{i},{i + 1}}}$ (Re)",
                     **plot_kwargs,
                 )
                 ax_im.plot(
                     theta,
-                    self.fresnel_t[l_index, :, i].imag,
-                    label=f"Fr T_{{{i},{i + 1}}} (Im)",
+                    self.fresnel_t[:, i].imag,
+                    label=f"Fr $T_{{{i},{i + 1}}}$ (Im)",
                     **plot_kwargs,
                 )
+        else:
+            for l_index in range(L):
+                for i in indices:
+                    ax_re.plot(
+                        theta,
+                        self.fresnel_r[l_index, :, i].real,
+                        label=f"Fr R_{{{i},{i + 1}}} (Re)",
+                        **plot_kwargs,
+                    )
+                    ax_im.plot(
+                        theta,
+                        self.fresnel_r[l_index, :, i].imag,
+                        label=f"Fr R_{{{i},{i + 1}}} (Im)",
+                        **plot_kwargs,
+                    )
+                    ax_re.plot(
+                        theta,
+                        self.fresnel_t[l_index, :, i].real,
+                        label=f"Fr T_{{{i},{i + 1}}} (Re)",
+                        **plot_kwargs,
+                    )
+                    ax_im.plot(
+                        theta,
+                        self.fresnel_t[l_index, :, i].imag,
+                        label=f"Fr T_{{{i},{i + 1}}} (Im)",
+                        **plot_kwargs,
+                    )
         ax_re.legend()
         ax_im.legend()
 
@@ -1565,12 +2222,13 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         return
 
     @override
-    def generate_pretty_figure_XEFI(
+    def generate_graphic_XEFI_map(
         self,
         z_vals: npt.NDArray[np.floating] | list[float | int] | None = None,
         fig: mplFig | mplSubFig | None = None,
         ax: mplAxes | None = None,
-        cbar_loc: Literal["fig", "ax"] = "fig",
+        cbar_loc: Literal["fig", "ax", "cbar_ax"] = "fig",
+        cbar_ax: mplAxes | None = None,
         cmap: Colormap = plt.get_cmap("viridis"),
         norm: Literal["linear", "log"] | Normalize = "linear",
         l_index: int | None = None,
@@ -1598,9 +2256,13 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             The matplotlib figure to use for the plot. If None, a new figure is created.
         ax : Axes | None, optional
             The matplotlib axes to use for the plot. If None, a new axes is created.
-        cbar_loc : Literal["fig", "ax"], optional
+        cbar_loc : Literal["fig", "ax", "cbar_ax"], optional
             The location of the colorbar. If "fig", the colorbar is padded to the right of the figure;
-            if "ax", it is padded to the right of the axes. Defaults to "fig".
+            if "ax", it is padded to the right of the axes; if "cbar_ax", it is placed in a separate axes.
+            Defaults to "fig".
+        cbar_ax : Axes | None, optional
+            The matplotlib axes to use for the colorbar. Only used if `cbar_loc` is "cbar_ax", and requires
+            a provided axes.
         cmap : Colormap, optional
             The colormap to use for the plot. Defaults to matplotlib's "viridis".
         norm : Literal["linear", "log"] | matplotlib.colors.Normalize, optional
@@ -1629,12 +2291,13 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         tuple[Figure | SubFigure, Axes]
             A tuple containing the matplotlib figure and axes used for the plot.
         """
-        fig, ax = super().generate_pretty_figure_XEFI(
+        fig, ax = super().generate_graphic_XEFI_map(
             z_vals=z_vals,
             fig=fig,
             ax=ax,
             cbar_loc=cbar_loc,
             cmap=cmap,
+            cbar_ax=cbar_ax,
             norm=norm,
             m_index=m_index,
             l_index=l_index,
@@ -1644,16 +2307,16 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             grid_crit=grid_crit,
             angles_in_deg=angles_in_deg,
         )
-        if grid_roughness:
-            self._add_rough_gridding_to_XEFI(
-                ax,
-                l_index=l_index,
-                m_index=m_index,
-            )
+        # if grid_roughness:
+        #     self._add_XEFI_roughness(
+        #         ax,
+        #         l_index=l_index,
+        #         m_index=m_index,
+        #     )
 
         return fig, ax
 
-    def _add_rough_gridding_to_XEFI(
+    def _add_XEFI_roughness(
         self,
         ax: mplAxes,
         l_index: int | None = None,
