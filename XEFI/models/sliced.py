@@ -86,7 +86,7 @@ class SlicedResult(BaseRoughResult):
     def __init__(self) -> None:
         super().__init__()
         # New Definitions
-        self.slice_thickness: float = 0.0
+        self.slice_thickness: float | None = None
         """The thickness of each slice in Angstroms (Å)."""
         self.pre_N: int | None
         """The pre-sliced number of layers."""
@@ -110,7 +110,7 @@ class SlicedResult(BaseRoughResult):
         # Reset parent properties
         super().reset()
         # Reset new properties
-        self.slice_thickness = 0.0
+        self.slice_thickness = None
         self.pre_N = None
         self.pre_z = None
         self.pre_refractive_indices = None
@@ -595,10 +595,10 @@ def XEF_Sliced(
             )
 
     elif (
-        isinstance(refractive_indices, list)
+        isinstance(refractive_indices, (list, tuple))
         and all(isinstance(n, (int, float, complex)) for n in refractive_indices)
         and L == 1
-        and len(refractive_indices) == pre_N
+        and len(refractive_indices) == pre_N + 1
     ):
         # Valid refractive indices for a single energy
         pre_ref_idxs = np.array(refractive_indices, dtype=np.complex128, copy=True)[

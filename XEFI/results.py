@@ -957,7 +957,6 @@ class BaseResult(metaclass=ABCMeta):
             The labels for the z layers. If None, defaults to automatic labels.
         label_kwargs : dict | None, optional
             Additional keyword arguments to pass to the label plotting function.
-            If None, defaults to an empty dictionary.
         """
 
         N, z = self.N, self.z
@@ -991,6 +990,8 @@ class BaseResult(metaclass=ABCMeta):
             "alpha": 0.7,
             "transform": ax.get_yaxis_transform(),
         }
+        if label_kwargs is not None:
+            lkwargs.update(label_kwargs)
 
         # Layers:
         if grid_z:

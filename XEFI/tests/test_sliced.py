@@ -81,3 +81,5 @@ class TestSliced:
             angles_in_deg=False,
         )
         sliced_attributes_defined(result)
+        result.reset()
+        sliced_attributes_defined(result, are_defined=False)
