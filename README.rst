@@ -39,7 +39,6 @@ Supports the use of the `KKCalc` package to calculate the index of refraction wi
 
 .. image:: ./docs/source/_static/graphics/basic-dev-ps_p3ht_si-XEFI_map.png
    :alt: Screenshot of an XEFI generated map.
-   :scale: 80%
    :align: center
 
 The Model
@@ -48,7 +47,6 @@ To make this model representative of the code, we count $N+1$ layers from $i=0$ 
 
 .. image:: ./docs/source/_static/graphics/geometry.png
    :alt: Screenshot of the XEFI model geometry.
-   :scale: 50%
    :align: center
 
 Here, layers $i=0$ and $i=N$ are semi-infinite layers, typically modelling air/vacuum and a substrate respectively. Boundary conditions allow us to set the incident amplitude $T_0 = 1$, and the reflected amplitude $R_{N}=0$. We define the following quantities:
