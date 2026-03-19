@@ -8,9 +8,11 @@ Sources
 
 The ``XEFI`` package requires Python 3.12+, and is available from:
 
-- PyPI: https://pypi.python.org/pypi/XEFI/
-- GitHub: https://github.com/xraysoftmat/XEFI
-- GitHub Releases: https://github.com/xraysoftmat/XEFI/releases
+- Sources:
+    * GitHub: https://github.com/xraysoftmat/XEFI
+- Releases:
+    * PyPI: https://pypi.python.org/pypi/XEFI/
+    * GitHub Releases: https://github.com/xraysoftmat/XEFI/releases
 
 Virtual Environment
 ###################
@@ -48,10 +50,10 @@ Or alternatively, clone the source code using ``git``:
 .. code-block:: bash
 
     (myenv) > git clone http://github.com/xraysoftmat/kkcalc # or your own fork/branch.
-    (myenv) > pip install ./kkcalc2/  # use -e for editable mode, recommended when changing code
+    (myenv) > pip install ./XEFI/  # use -e for editable mode, recommended when changing code
 
 
-Following `PEP735 <https://peps.python.org/pep-0735/>`_, ``KKCalc2`` also has dependency groups established. You may need to upgrade ``pip>=25.1`` to use dependency groups. The following groups are available:
+Following `PEP735 <https://peps.python.org/pep-0735/>`_, ``XEFI`` also has dependency groups established. You may need to upgrade ``pip>=25.1`` to use dependency groups. The following groups are available:
 
 - ``docs`` : Install Sphinx, numpydoc and other packages required for building the documentation.
 - ``gui`` : Install graphic packages (PyQT, matplotlib, pandas).
@@ -70,27 +72,11 @@ You can check the package is installed:
 
 .. code-block:: python
 
-    >>> import kkcalc2
-    >>> print(kkcalc2.__version__)
+    >>> import XEFI
+    >>> print(XEFI.__version__)
 
 .. parsed-literal::
     \ |release|  # or whatever the latest version is
-
-GUI Module
-##########
-
-If you've installed the GUI dependency group, you can then run the module:
-
-.. code-block:: bash
-
-    (myvenv) > python -m kkcalc2
-
-The modularised GUI interface can be used without requiring the python API.
-
-.. image:: ./_static/kk_calc.jpg
-   :alt: Screenshot of the KKCalc GUI interface
-   :scale: 50%
-   :align: center
 
 Virtual Environment Deactivation
 ################################

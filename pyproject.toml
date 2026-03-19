@@ -54,7 +54,10 @@ dev = [
 
 docs = [
     "sphinx",
-    "sphinx-rtd-theme",
+    "sphinx-pyproject",
+    "sphinx-copybutton",
+    # "sphinx-rtd-theme",
+    "pydata-sphinx-theme",
     "numpydoc",
 ]
 
@@ -66,14 +69,12 @@ docs = [
 [tool.hatch.build]
 directory = "./dist" # Output directory for built packages
 targets.sdist.include = [
-    "kkcalc2/**",
+    "XEFI/**",
     # "examples/data/**",
 ]
 targets.sdist.exclude = [
     "docs/*",
     "tests/*",
-    "kkcalc2/asf_database/db_data/*", # Exclude raw data files from package
-    "kkcalc2/asf_database/db_generator_script.py", # Exclude db generator script
 ]
 
 [tool.hatch.envs.dev]
@@ -217,7 +218,7 @@ html_theme = "pydata_sphinx_theme"
     type = "fontawesome"
 
 [tool.sphinx-pyproject.html_sidebars]
-  "**" = []
+  "**" = ["sidebar-nav-bs", "sidebar-ethical-ads"]
 
 [tool.sphinx-pyproject.html_context]
     default_mode = "light"
