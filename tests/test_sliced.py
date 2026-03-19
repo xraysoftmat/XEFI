@@ -5,7 +5,7 @@ Tests for the `model.sliced` XEFI module.
 import pytest
 from XEFI.models import SlicedResult
 from XEFI import XEF_method, XEF_Sliced
-from XEFI.tests.test_basic import base_rough_attributes_defined
+from tests.test_basic import base_rough_attributes_defined
 import numpy as np
 
 
@@ -81,3 +81,5 @@ class TestSliced:
             angles_in_deg=False,
         )
         sliced_attributes_defined(result)
+        result.reset()
+        sliced_attributes_defined(result, are_defined=False)

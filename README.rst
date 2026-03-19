@@ -6,22 +6,35 @@ A package for calculations of X-ray Electric Field Intensities (XEFI) using the 
 This package calculates discrete models of multi-layer structures, including the ability to slice simplistic models into arbitrary layers.
 Supports the use of the `KKCalc` package to calculate the index of refraction within layers.
 
-|tool-semver| |tool-black| |tool-ruff| |tool-numpydoc|
+.. MAKE SURE TO UPDATE THE docs/index.rst to match. These files are now diverged.
 
-|PyPI Version| |PyTest| |Coveralls| |Pre-commit|
+|PyPI Version| |readthedocs| |Coveralls| |Pre-commit|
+
+|PyTest| |Linting| |Documentation|
+
+|tool-semver| |tool-black| |tool-ruff| |tool-numpydoc|
 
 .. |PyPI Version| image:: https://img.shields.io/pypi/v/XEFI?label=XEFI&logo=pypi
    :target: https://pypi.org/project/XEFI/
    :alt: pypi
-.. |PyTest| image:: https://github.com/xraysoftmat/XEFI/actions/workflows/test.yml/badge.svg
+.. |PyTest| image:: https://github.com/xraysoftmat/XEFI/actions/workflows/tests.yml/badge.svg
     :alt: PyTest
-    :target: https://github.com/xraysoftmat/XEFI/actions/workflows/test.yml
+    :target: https://github.com/xraysoftmat/XEFI/actions/workflows/tests.yml
+.. |Linting| image:: https://github.com/xraysoftmat/XEFI/actions/workflows/linting.yml/badge.svg
+    :alt: Linting
+    :target: https://github.com/xraysoftmat/XEFI/actions/workflows/linting.yml
+.. |Documentation| image:: https://github.com/xraysoftmat/XEFI/actions/workflows/docs.yml/badge.svg
+    :alt: Documentation
+    :target: https://github.com/xraysoftmat/XEFI/actions/workflows/docs.yml
 .. |Coveralls| image:: https://coveralls.io/repos/github/xraysoftmat/XEFI/badge.svg
     :alt: Coverage Status
     :target: https://coveralls.io/github/xraysoftmat/XEFI
 .. |Pre-commit| image:: https://results.pre-commit.ci/badge/github/xraysoftmat/XEFI/main.svg
     :alt: pre-commit.ci status
     :target: https://results.pre-commit.ci/latest/github/xraysoftmat/XEFI/main
+.. |readthedocs| image:: https://img.shields.io/readthedocs/XEFI?version=latest&style=flat&label=ReadtheDocs
+    :alt: Documentation
+    :target: https://XEFI.readthedocs.io/
 
 .. |tool-semver| image:: https://img.shields.io/badge/versioning-Python%20SemVer-blue.svg
     :alt: Python SemVer
@@ -39,7 +52,6 @@ Supports the use of the `KKCalc` package to calculate the index of refraction wi
 
 .. image:: ./docs/source/_static/graphics/basic-dev-ps_p3ht_si-XEFI_map.png
    :alt: Screenshot of an XEFI generated map.
-   :scale: 80%
    :align: center
 
 The Model
@@ -48,7 +60,6 @@ To make this model representative of the code, we count $N+1$ layers from $i=0$ 
 
 .. image:: ./docs/source/_static/graphics/geometry.png
    :alt: Screenshot of the XEFI model geometry.
-   :scale: 50%
    :align: center
 
 Here, layers $i=0$ and $i=N$ are semi-infinite layers, typically modelling air/vacuum and a substrate respectively. Boundary conditions allow us to set the incident amplitude $T_0 = 1$, and the reflected amplitude $R_{N}=0$. We define the following quantities:

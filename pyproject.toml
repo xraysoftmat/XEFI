@@ -1,10 +1,9 @@
 [build-system]
     requires = [
-        "setuptools>=60",
-        "setuptools-scm>=8.0",
+        "hatchling",
         "pip >= 25.1", # Supports group dependency installs.
     ]
-    build-backend = "setuptools.build_meta"
+    build-backend = "hatchling.build"
 
 
 [project]
@@ -13,10 +12,11 @@
     version = "0.1.0-beta.1"
     description = "Calculations for X-ray Electric Field Intensities using the Parratt recursive algorithm."
     readme = "README.rst"
-    license = {file = "LICENSE"}
-    keywords = ["X-ray", "Waveguiding", "Parratt", "Electric", "XEFI", "Intensity", "Field", "Intensity"]
+    license-files = ["MIT.LICENSE"]
+    keywords = ["X-ray", "Waveguiding", "Parratt", "Electric", "XEFI", "Field", "Intensity"]
     authors = [
         {name = "Matthew Gebert", email="matthew.gebert@monash.edu"},
+        {name = "Christopher McNeill", email="christopher.mcneill@monash.edu"},
         ]
     maintainers = [
         {name = "Matthew Gebert", email="matthew.gebert@monash.edu"},
@@ -25,10 +25,22 @@
     # Project compatibility:
     requires-python = ">=3.12"
     dependencies = [
-        "numpy",
-        "scipy",
-        "matplotlib",
+        "numpy~=2.4.0",
+        "scipy~=1.17.1",
+        "matplotlib~=3.10.8",
     ]
+
+    classifiers = [
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+    ]
+
+[project.scripts]
+# Command line entry points.
+
+[project.gui-scripts]
 
 [dependency-groups]
 dev = [
@@ -38,15 +50,44 @@ dev = [
     "python-semantic-release",
     "commitizen",
     "commitlint",
-    "black",
-    # "plotly",
 ]
 
 docs = [
     "sphinx",
-    "sphinx-rtd-theme",
+    "sphinx-pyproject",
+    "sphinx-copybutton",
+    # "sphinx-rtd-theme",
+    "pydata-sphinx-theme",
     "numpydoc",
 ]
+
+#######################################################
+#############  Package Build configurations  ##########
+#######################################################
+
+# Use "hatchling build" as the build command.
+[tool.hatch.build]
+directory = "./dist" # Output directory for built packages
+targets.sdist.include = [
+    "XEFI/**",
+    # "examples/data/**",
+]
+targets.sdist.exclude = [
+    "docs/*",
+    "tests/*",
+]
+
+[tool.hatch.envs.dev]
+dependency-groups = ["dev"]
+post-install-commands = [
+    # Install pre-commit hooks
+    "pre-commit install --install-hooks",
+]
+
+#######################################################
+#############  Pre-commit configurations  #############
+#######################################################
+
 
 ## Linting
 # Ruff
@@ -83,7 +124,6 @@ line-ending = "auto"
         "^Xas",
         "",
     ]
-
 
 ## Semantic Versioning / Conventional Commits
 # Commitizen
@@ -158,7 +198,7 @@ html_theme = "pydata_sphinx_theme"
     navbar_end = ["theme-switcher", "navbar-icon-links"]
     navbar_persistent = ["search-button"]
     navbar_align = "content"
-    show_nav_level = 2
+    show_nav_level = 3
     navigation_depth = 4
     # ...
     secondary_sidebar_items = ["page-toc", "edit-this-page", "sourcelink"]
@@ -178,7 +218,7 @@ html_theme = "pydata_sphinx_theme"
     type = "fontawesome"
 
 [tool.sphinx-pyproject.html_sidebars]
-  "**" = []
+  "**" = ["sidebar-nav-bs", "sidebar-ethical-ads"]
 
 [tool.sphinx-pyproject.html_context]
     default_mode = "light"

@@ -6,13 +6,20 @@ from XEFI import models
 from XEFI.models import (
     XEF_Basic,
     XEF_Sliced,
+    SlicedResult,
     BasicResult,
     BasicRoughResult,
-    SlicedResult,
 )
-from XEFI.results import XEF_method
+from XEFI.results import (
+    XEF_method,
+)
 import XEFI.fitting as fitting
 
+import importlib.metadata
+
+# Calculate the __version__ from the pyproject.toml file
+__version__ = importlib.metadata.version("XEFI")
+del importlib
 
 __all__ = [
     # Modules:
