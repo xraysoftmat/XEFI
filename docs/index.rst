@@ -97,12 +97,6 @@ After recursively computing the ratio :math:`X_i`, then solving the amplitudes :
 
 $$E^{Total}_i(E_{beam}, θ^t_0, z) = T_i(E_{beam}, θ^t    _0) exp(-i k_i (z-z_i))   + R_i  (E_{beam}, θ^t_0) exp(i k_i (z-z_i))$$
 
-
-
-.. list-table:: XEFI Features
-  :widths: 20 80
-  :header-rows: 1
-
 Links
 #####
 
@@ -110,8 +104,8 @@ Please raise any `issues <https://github.com/xraysoftmat/XEFI/issues>`_ here.
 
 - Development (Github): https://github.com/xraysoftmat/XEFI/
 - Releases
-  - Github: https://github.com/xraysoftmat/XEFI/releases
-  - PyPI: https://pypi.python.org/pypi/XEFI/
+   * Github Releases: https://github.com/xraysoftmat/XEFI/releases
+   * PyPI: https://pypi.python.org/pypi/XEFI/
 - Documentation (ReadtheDocs): https://XEFI.readthedocs.io/
 
 .. toctree::
@@ -121,7 +115,6 @@ Please raise any `issues <https://github.com/xraysoftmat/XEFI/issues>`_ here.
     source/tutorials/index
     source/contributing
     CHANGELOG
-    TODOLIST
     source/api
 
 .. hello?

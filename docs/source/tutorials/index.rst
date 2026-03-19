@@ -20,13 +20,14 @@ Select a model to get started.
 
 .. toctree::
     :caption: Models
+    :maxdepth: 2
 
-    xef/xef_basic
-    xef/xef_rough
-    xef/xef_sliced
+    xef/basic
+    xef/sliced
 
 .. toctree::
     :caption: Advanced
+    :maxdepth: 2
 
     advanced/fitting
     advanced/algorithms

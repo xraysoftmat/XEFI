@@ -12,8 +12,8 @@
     version = "0.1.0-beta.1"
     description = "Calculations for X-ray Electric Field Intensities using the Parratt recursive algorithm."
     readme = "README.rst"
-    license = {file = "MIT.LICENSE"}
-    keywords = ["X-ray", "Waveguiding", "Parratt", "Electric", "XEFI", "Intensity", "Field", "Intensity"]
+    license-files = ["MIT.LICENSE"]
+    keywords = ["X-ray", "Waveguiding", "Parratt", "Electric", "XEFI", "Field", "Intensity"]
     authors = [
         {name = "Matthew Gebert", email="matthew.gebert@monash.edu"},
         {name = "Christopher McNeill", email="christopher.mcneill@monash.edu"},
@@ -198,7 +198,7 @@ html_theme = "pydata_sphinx_theme"
     navbar_end = ["theme-switcher", "navbar-icon-links"]
     navbar_persistent = ["search-button"]
     navbar_align = "content"
-    show_nav_level = 2
+    show_nav_level = 3
     navigation_depth = 4
     # ...
     secondary_sidebar_items = ["page-toc", "edit-this-page", "sourcelink"]
