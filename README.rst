@@ -8,7 +8,7 @@ Supports the use of the `KKCalc` package to calculate the index of refraction wi
 
 .. MAKE SURE TO UPDATE THE docs/index.rst to match. These files are now diverged.
 
-|PyPI Version| |readthedocs| |Coveralls| |Pre-commit|
+|PyPI Version| |zenodo| |readthedocs| |Coveralls| |Pre-commit|
 
 |PyTest| |Linting| |Documentation|
 
@@ -35,6 +35,8 @@ Supports the use of the `KKCalc` package to calculate the index of refraction wi
 .. |readthedocs| image:: https://img.shields.io/readthedocs/XEFI?version=latest&style=flat&label=ReadtheDocs
     :alt: Documentation
     :target: https://XEFI.readthedocs.io/
+.. |zenodo| image:: https://zenodo.org/badge/1006786654.svg
+  :target: https://doi.org/10.5281/zenodo.19104394
 
 .. |tool-semver| image:: https://img.shields.io/badge/versioning-Python%20SemVer-blue.svg
     :alt: Python SemVer
