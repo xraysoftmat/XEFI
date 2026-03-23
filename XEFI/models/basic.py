@@ -31,11 +31,17 @@ Conversion factor from energy in eV to wavevector in inverse angstroms.
 
 # Support for KKCalc
 try:
-    from kkcalc.models.polynomials import asp_complex
+    from kkcalc2.models.polynomials import asp_complex
 
     has_KKCalc = True
 except ImportError:
-    has_KKCalc = False
+    # Try old binding for kkcalc instead
+    try:
+        from kkcalc.models.polynomials import asp_complex
+
+        has_KKCalc = True
+    except ImportError:
+        has_KKCalc = False
 
 
 class BasicResult(BaseResult):
@@ -391,8 +397,10 @@ def XEF_Basic(
         isinstance(refractive_indices, list)
         and len(refractive_indices) == N + 1
         and all(
-            callable(n) for n, i in enumerate(refractive_indices) if i != 0
-        )  # Allow for first layer to be air or vacuum with n=1
+            callable(n) or (isinstance(n, (float, int, complex)) and n == 1)
+            # Allow for first layer to be air or vacuum with n=1
+            for n in refractive_indices
+        )
     ):
         # Valid refractive indices for multiple energies using Callable
         ref_idxs = np.zeros((L, N + 1), dtype=np.complex128)
@@ -402,13 +410,16 @@ def XEF_Basic(
         for i, mat_n in enumerate(
             refractive_indices
         ):  # Iterate over the layers, apply the energy.
-            if i == 0 and (isinstance(mat_n, (int, float))):
+            if isinstance(mat_n, (int, float)):
                 ref_idxs[:, i] = mat_n + 0j  # Convert to complex
+                continue
+            elif isinstance(mat_n, complex):
+                ref_idxs[:, i] = mat_n
                 continue
             assert callable(mat_n)
             if L == 1:
-                ref_idxs[0, i] = mat_n(
-                    energies
+                ref_idxs[0, i] = np.squeeze(
+                    mat_n(energies)
                 )  # Apply the energy to the Callable function
             elif single_energy_calc:
                 for j in range(L):

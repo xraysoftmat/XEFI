@@ -18,11 +18,16 @@ import numpy.typing as npt
 from scipy import special as sp
 
 try:
-    from kkcalc.models import asp_complex
+    from kkcalc2.models import asp_complex
 
     has_KKCalc = True
 except ImportError:
-    has_KKCalc = False
+    try:
+        from kkcalc.models import asp_complex
+
+        has_KKCalc = True
+    except ImportError:
+        has_KKCalc = False
 
 
 class SlicedResult(BaseRoughResult):
@@ -137,7 +142,7 @@ class SlicedResult(BaseRoughResult):
         if ax_re is not None or ax_im is not None:
             pre_N = self.pre_N
             L = self.L
-            pre_ref_idxs = self.pre_refractive_indices
+            pre_ref_idxs = np.squeeze(self.pre_refractive_indices)
             assert pre_N is not None
             assert pre_ref_idxs is not None
             if l_index is not None:
@@ -156,7 +161,7 @@ class SlicedResult(BaseRoughResult):
                         y=pre_ref_idxs[i].real, color="C1", linestyle="--", alpha=0.5
                     )
 
-        return
+        return result
 
     # @override
     @BaseRoughResult.critical_angles_deg.getter
@@ -265,12 +270,16 @@ class SlicedResult(BaseRoughResult):
     def _add_XEFI_gridding(
         self,
         ax: Axes,
+        *,
         l_index: int | None = None,
         m_index: int | None = None,
         grid_z: bool = True,
         grid_labels: bool = True,
         grid_crit: bool = True,
+        grid_kwargs: dict | None = None,
         labels: list[str] | None = None,
+        label_kwargs: dict | None = None,
+        angles_in_deg: bool = True,
     ) -> None:
         """
         To add gridding lines.
@@ -302,8 +311,14 @@ class SlicedResult(BaseRoughResult):
             Whether to plot the z layer labels. Defaults to True.
         grid_crit : float, optional
             Whether to plot the critical angles grid. Defaults to True.
+        grid_kwargs : dict | None, optional
+            Additional keyword arguments for the grid lines. Defaults to None.
         labels : list[str] | None, optional
             The labels for the z layers. If None, defaults to automatic labels.
+        label_kwargs : dict | None, optional
+            Additional keyword arguments for the layer labels. Defaults to None.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
         """
         pre_N, pre_z = self.pre_N, self.pre_z
         assert pre_N is not None
@@ -313,6 +328,7 @@ class SlicedResult(BaseRoughResult):
         x_selection, x_data, critical_angles = self._require_singular_x_data(
             m_index=m_index,
             l_index=l_index,
+            angles_in_degrees=angles_in_deg,
         )
 
         ### Add gridding and labels to the layers
@@ -322,6 +338,30 @@ class SlicedResult(BaseRoughResult):
                 labels = result_labels
             else:
                 labels = [f"Layer {i}" for i in range(pre_N + 1)]
+
+        # Update keywords
+        gkwargs = {
+            "color": "white",
+            "linestyle": "--",
+            "alpha": 0.2,
+            "linewidth": 0.5,
+        }
+        gkwargs.update(grid_kwargs or {})
+        # Label kwargs, also apply to vertical labels.
+        lkwargs = {
+            "color": "white",
+            "alpha": 0.7,
+        }
+        if label_kwargs is not None:
+            lkwargs.update(label_kwargs)
+        # Horizontal label kwargs
+        hl_kwargs = dict(
+            transform=ax.get_yaxis_transform(),
+            ha="right",
+            x=1.0,
+        )
+        hl_kwargs.update(lkwargs)
+
         # Layers:
         if grid_z:
             for zi in pre_z:
@@ -330,45 +370,26 @@ class SlicedResult(BaseRoughResult):
                 for i, zi in enumerate(pre_z):
                     name = labels[i + 1]
                     ax.text(
-                        x=1.0,
                         y=zi,
                         s=name,
-                        transform=ax.get_yaxis_transform(),
-                        ha="right",
                         va="top",
-                        color="white",
+                        **hl_kwargs,
                     )
                 ax.text(
-                    x=1.0,
                     y=pre_z[0],
                     s=labels[0],
-                    transform=ax.get_yaxis_transform(),
-                    ha="right",
                     va="bottom",
-                    color="white",
+                    **hl_kwargs,
                 )
 
-        # Critical Angles
-        if (
-            grid_crit and x_selection == "theta" and critical_angles is not None
-        ):  # Is a angle plot.
-            for ang in critical_angles:
-                if ang > x_data.min() and ang < x_data.max():
-                    ax.axvline(
-                        x=ang, color="white", linestyle="--", alpha=0.2, linewidth=0.5
-                    )
-            if grid_labels and labels is not None:
-                for i, ang in enumerate(critical_angles):
-                    if ang > x_data.min() and ang < x_data.max():
-                        name = labels[i + 1]
-                        ax.text(
-                            x=ang,
-                            y=0.00,
-                            s=name,
-                            transform=ax.get_xaxis_transform(),
-                            color="white",
-                            ha="center",
-                        )
+        if grid_crit and x_selection == "theta" and critical_angles is not None:
+            self._add_crit_angles(
+                ax=ax,
+                angles=x_data,
+                vline_kwargs=gkwargs,
+                label_kwargs=lkwargs,
+                angles_in_deg=angles_in_deg,
+            )
 
     @override
     def _add_XEFI_roughness(
@@ -376,6 +397,7 @@ class SlicedResult(BaseRoughResult):
         ax: mplAxes,
         l_index: int | None = None,
         m_index: int | None = None,
+        angles_in_deg: bool = True,
     ):
         """
         Represent the roughness on the grid by transparent bars.
@@ -388,10 +410,13 @@ class SlicedResult(BaseRoughResult):
             A singular index to consider for the beam energies. Defaults to None.
         m_index : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
         """
         x_selection, x_data, _ = self._require_singular_x_data(
             l_index=l_index,
             m_index=m_index,
+            angles_in_degrees=angles_in_deg,
         )
         if x_selection is None:
             raise ValueError(
@@ -647,14 +672,18 @@ def XEF_Sliced(
         for i, mat_n in enumerate(
             refractive_indices
         ):  # Iterate over the layers, apply the energy.
-            if isinstance(mat_n, (int, float, complex)) and mat_n == 0:
-                pre_ref_idxs[:, i] = mat_n + 0j  # Convert to complex
+            # Allow for any layer to be air or vacuum with n=1, even when using
+            # Callable functions for other layers.
+            if isinstance(mat_n, (int, float, complex)) and mat_n == 1:
+                pre_ref_idxs[:, i] = 1 + 0j  # Convert to complex
                 continue
 
-            assert callable(mat_n)
+            assert callable(mat_n), (
+                f"The {i}th refractive index is not callable, but is instead {mat_n} of type {type(mat_n)}."
+            )
             if L == 1:
-                pre_ref_idxs[0, i] = mat_n(
-                    energies
+                pre_ref_idxs[0, i] = np.squeeze(
+                    mat_n(energies)
                 )  # Apply the energy to the Callable function
             elif single_energy_calc:
                 for j in range(L):
