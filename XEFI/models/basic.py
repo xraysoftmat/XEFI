@@ -2,46 +2,20 @@
 Module for the XEFI calculation of a basic set of layers.
 """
 
+# std.lib
+from typing import Callable, override, overload
+import warnings
+
+# internal
+from XEFI.results import BaseResult, BaseRoughResult, XEF_method
+from XEFI.utils import en2wvec, HAS_KKCALC
+
+# external
 import numpy as np
 import numpy.typing as npt
-from typing import Callable, override, overload
-from XEFI.results import BaseResult, BaseRoughResult, XEF_method
-import warnings
-import scipy.constants as sc
 
-en2wav: float = sc.h * sc.c / sc.e * 1e10
-r"""
-Conversion factor from energy in eV to wavelength in angstroms.
-
-.. math::
-    \lambda = (h \times c) / (E \times e)
-    wav = en2wav / E
-
-"""
-en2wvec: float = 2 * sc.pi / en2wav
-r"""
-Conversion factor from energy in eV to wavevector in inverse angstroms.
-
-.. math::
-    \lambda = (h \times c) / (E \times e) * 1e10
-    \lambda = en2wav / E
-    \k = 2 \pi / (\lambda)
-    \k = en2wvec * E
-"""
-
-# Support for KKCalc
-try:
+if HAS_KKCALC:
     from kkcalc2.models.polynomials import asp_complex
-
-    has_KKCalc = True
-except ImportError:
-    # Try old binding for kkcalc instead
-    try:
-        from kkcalc.models.polynomials import asp_complex
-
-        has_KKCalc = True
-    except ImportError:
-        has_KKCalc = False
 
 
 class BasicResult(BaseResult):
@@ -373,7 +347,7 @@ def XEF_Basic(
             )
     elif (
         isinstance(refractive_indices, (list, np.ndarray))
-        and has_KKCalc
+        and HAS_KKCALC
         # Allow float for vacuum or air - i.e. no material absorption.:
         and all(
             isinstance(n, (float, complex, asp_complex)) for n in refractive_indices

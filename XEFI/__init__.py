@@ -13,7 +13,7 @@ from XEFI.models import (
 from XEFI.results import (
     XEF_method,
 )
-import XEFI.fitting as fitting
+# import XEFI.fitting as fitting
 
 import importlib.metadata
 
@@ -23,15 +23,17 @@ del importlib
 
 __all__ = [
     # Modules:
-    models,
-    fitting,
+    "models",
+    # "fitting",
     # Enumerates:
-    XEF_method,
+    "XEF_method",
     # Calculation Methods:
-    XEF_Basic,
-    XEF_Sliced,
+    "XEF_Basic",
+    "XEF_Sliced",
     # Result classes:
-    BasicResult,
-    BasicRoughResult,
-    SlicedResult,
+    "BasicResult",
+    "BasicRoughResult",
+    "SlicedResult",
+    # Properties
+    "__version__",
 ]

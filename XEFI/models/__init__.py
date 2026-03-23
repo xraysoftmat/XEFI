@@ -9,13 +9,13 @@ from XEFI.models.basic import BasicResult, BasicRoughResult, XEF_Basic
 
 __all__ = [
     # Modules:
-    sliced,
-    basic,
+    "sliced",
+    "basic",
     # Methods:
-    XEF_Basic,
-    XEF_Sliced,
+    "XEF_Basic",
+    "XEF_Sliced",
     # Result Classes
-    BasicResult,
-    BasicRoughResult,
-    SlicedResult,
+    "BasicResult",
+    "BasicRoughResult",
+    "SlicedResult",
 ]

@@ -50,6 +50,7 @@ dev = [
     "python-semantic-release",
     "commitizen",
     "commitlint",
+    "kkcalc2",
 ]
 
 docs = [

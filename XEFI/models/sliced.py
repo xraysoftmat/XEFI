@@ -17,17 +17,10 @@ import numpy as np
 import numpy.typing as npt
 from scipy import special as sp
 
-try:
+from XEFI.utils import HAS_KKCALC
+
+if HAS_KKCALC:
     from kkcalc2.models import asp_complex
-
-    has_KKCalc = True
-except ImportError:
-    try:
-        from kkcalc.models import asp_complex
-
-        has_KKCalc = True
-    except ImportError:
-        has_KKCalc = False
 
 
 class SlicedResult(BaseRoughResult):
@@ -637,7 +630,7 @@ def XEF_Sliced(
             )
     elif (
         isinstance(refractive_indices, (list, np.ndarray))
-        and has_KKCalc
+        and HAS_KKCALC
         # Allow float for vacuum or air - i.e. no material absorption.:
         and all(
             isinstance(n, (float, complex, asp_complex)) for n in refractive_indices
