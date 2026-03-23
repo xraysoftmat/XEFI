@@ -298,8 +298,8 @@ jobs:
       needs.py-sem-rel-version.result == 'success' &&
       needs.py-sem-rel-version.outputs.released == 'true' &&
       needs.py-sem-rel-publish.result == 'success' &&
-      !inputs.noop &&
-      (github.repository_owner == 'benajamin' || github.repository_owner == 'xraysoftmat')
+      (github.repository_owner == 'benajamin' || github.repository_owner == 'xraysoftmat') &&
+      (!inputs.noop)
     # Only run this job on the master account, only publish to PyPI on tag pushes
     permissions:
       contents: read
