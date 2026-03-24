@@ -2,6 +2,7 @@
 XEFI provides tools for simulating and fitting X-ray Electric Field Intensity profiles.
 """
 
+from XEFI import utils
 from XEFI import models
 from XEFI.models import (
     XEF_Basic,
@@ -24,6 +25,7 @@ del importlib
 __all__ = [
     # Modules:
     "models",
+    "utils",
     # "fitting",
     # Enumerates:
     "XEF_method",
