@@ -97,6 +97,7 @@ extensions = [
     # "autoapi.extension",
     "matplotlib.sphinxext.plot_directive",
     "sphinx.ext.coverage",
+    # "sphinx.ext.linkcode", TODO: Add linkcode support for GitHub source code links / readthedocs.
 ]
 
 
