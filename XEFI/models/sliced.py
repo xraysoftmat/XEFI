@@ -654,7 +654,8 @@ def XEF_Sliced(
         isinstance(refractive_indices, list)
         and len(refractive_indices) == pre_N + 1
         and all(
-            callable(n) if (n != 1) else True for n in refractive_indices
+            callable(n) or (isinstance(n, (int, float, complex)) and n == 1)
+            for n in refractive_indices
         )  # Allow for any layer to be air or vacuum with n=1
     ):
         # Valid refractive indices for multiple energies using Callable
@@ -795,13 +796,20 @@ def XEF_Sliced(
             "Layer names must match the number of pre-sliced layers (pre_N+1)."
         )
         result.layer_names = layer_names.copy()
+    elif HAS_KKCALC and any(
+        isinstance(ref, (asp_complex)) for ref in refractive_indices
+    ):
+        result.layer_names = [
+            ref.name if ref.name is not None else f"Layer {i}"
+            for i, ref in enumerate(refractive_indices)
+        ]
     else:
         result.layer_names = None
         layer_names = [f"Layer {i}" for i in range(N + 1)]
 
     ## Generate result data
     # Wavevector magnitude in vacuum
-    k0: npt.NDArray[np.floating] = en2wvec * energies  # convert energy to wavevector.
+    k0: npt.NDArray[np.floating] = en2wvec(energies)  # convert energy to wavevector.
     """The wavevector magnitude (per angstrom) in vacuum for each energy (L)."""
     result.k0 = k0
 

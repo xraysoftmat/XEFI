@@ -1243,7 +1243,7 @@ class BaseResult(metaclass=ABCMeta):
     def _add_crit_angles(
         self,
         ax: mplAxes,
-        angles: npt.NDArray[np.floating],
+        angles: npt.NDArray[np.floating] | None = None,
         angle_labels: list[str] | None = None,
         angles_in_deg: bool = True,
         add_labels: bool = True,
@@ -1294,7 +1294,7 @@ class BaseResult(metaclass=ABCMeta):
         crits = self.critical_angles_deg if angles_in_deg else self.critical_angles
         if crits is not None:
             for ang in crits:
-                if ang > angles.min() and ang < angles.max():
+                if angles is None or (ang > angles.min() and ang < angles.max()):
                     ax.axvline(x=ang, **vl_args)
             if angle_labels is None:
                 angle_labels = self.layer_names
@@ -1306,23 +1306,24 @@ class BaseResult(metaclass=ABCMeta):
 
             if angle_labels is not None and add_labels:
                 for i, ang in enumerate(crits):
-                    if ang > angles.min() and ang < angles.max():
+                    if angles is None or (ang > angles.min() and ang < angles.max()):
                         name = (
                             angle_labels[i]
                             if i < len(angle_labels)
                             else f"Critical Angle {i + 1}"
                         )
                         ax.text(x=ang, s=name, **label_args)
-                ax.text(
-                    x=np.average(crits) if len(crits) > 0 else angles.mean(),
-                    y=1.01,
-                    s="Critical Angles",
-                    transform=ax.get_xaxis_transform(),
-                    color="black",
-                    alpha=0.5,
-                    ha="center",
-                    va="bottom",
-                )
+                if len(crits) > 0:
+                    ax.text(
+                        x=np.average(crits),
+                        y=1.01,
+                        s="Critical Angles",
+                        transform=ax.get_xaxis_transform(),
+                        color="black",
+                        alpha=0.5,
+                        ha="center",
+                        va="bottom",
+                    )
 
     def generate_graphic_XEFI(
         self,

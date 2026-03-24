@@ -285,6 +285,13 @@ def XEF_Basic(
             "Layer names must match the number of layers (N+1)."
         )
         result.layer_names = layer_names.copy()
+    elif HAS_KKCALC and any(isinstance(ref, asp_complex) for ref in refractive_indices):  # pyright: ignore
+        result.layer_names = [
+            ref.name
+            if (ref.name is not None and isinstance(ref, asp_complex))  # pyright: ignore
+            else f"Layer {i}"
+            for i, ref in enumerate(refractive_indices)
+        ]
     else:
         result.layer_names = None
         layer_names = [f"Layer {i}" for i in range(N + 1)]
@@ -423,7 +430,7 @@ def XEF_Basic(
 
     ## Generate result data
     # Wavevector magnitude in vacuum
-    k0: npt.NDArray[np.floating] = en2wvec * energies  # convert energy to wavevector.
+    k0: npt.NDArray[np.floating] = en2wvec(energies)  # convert energy to wavevector.
     """The wavevector magnitude (per angstrom) in vacuum for each energy (L)."""
     result.k0 = k0
 
