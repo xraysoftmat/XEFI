@@ -3,7 +3,7 @@ Module for the XEFI calculation of a basic set of layers.
 """
 
 # std.lib
-from typing import Callable, override, overload
+from typing import Callable, Sequence, override, overload
 import warnings
 
 # internal
@@ -155,9 +155,9 @@ class BasicRoughResult(BaseRoughResult):
 
 @overload
 def XEF_Basic(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
         | npt.NDArray[np.complexfloating]
@@ -174,9 +174,9 @@ def XEF_Basic(
 
 @overload
 def XEF_Basic(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
         | npt.NDArray[np.complexfloating]
@@ -185,16 +185,16 @@ def XEF_Basic(
     ),
     *,
     method: XEF_method | str = XEF_method.DEV,
-    z_roughness: list[float | int] | npt.NDArray[np.floating],
+    z_roughness: Sequence[float | int] | npt.NDArray[np.floating],
     layer_names: list[str] | None = None,
     angles_in_deg: bool = True,
 ) -> BasicRoughResult: ...
 
 
 def XEF_Basic(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
         | npt.NDArray[np.complexfloating]
@@ -203,7 +203,7 @@ def XEF_Basic(
     ),
     *,
     method: XEF_method | str = XEF_method.DEV,
-    z_roughness: list[float | int] | npt.NDArray[np.floating] | None = None,
+    z_roughness: Sequence[float | int] | npt.NDArray[np.floating] | None = None,
     layer_names: list[str] | None = None,
     angles_in_deg: bool = True,
 ) -> BasicResult | BasicRoughResult:
@@ -212,11 +212,11 @@ def XEF_Basic(
 
     Parameters
     ----------
-    energies : list[float] | npt.NDArray[np.floating] | float
+    energies : Sequence[float | int] | npt.NDArray[np.floating] | float | int
         The beam energy(s) in eV. Can be a single value or an array of values.
-    angles : list[float] | npt.NDArray[np.floating] | float
+    angles : Sequence[float | int] | npt.NDArray[np.floating] | float | int
         The angles in degrees at which to calculate the XEFI. Can be a single value or an array of values.
-    z : list[float] | npt.NDArray[np.floating]
+    z : Sequence[float | int] | npt.NDArray[np.floating | np.integer]
         The interface locations in Angstroms. Must be a list or array of floats.
     refractive_indices : list[complex] | npt.NDArray[np.complexfloating] | list[Callable] | list["asp_complex"]
         The refractive indices for each energy and layer.
@@ -224,7 +224,7 @@ def XEF_Basic(
         a list of `KKCalc` `asp_complex` objects (N+1), or a list of Callable functions that return complex numbers (N+1).
     method : XEF_method | str
         The method to use for the calculation, by default `XEF_method.dev`.
-    z_roughness : list[float] | npt.NDArray[np.floating] | None, optional
+    z_roughness : Sequence[float | int] | npt.NDArray[np.floating] | None, optional
         The roughness of the interfaces in Angstroms. If provided, it should be a list or array of floats with the same length as `z`.
         If None, no roughness is applied, by default None.
     layer_names : list[str] | None, optional

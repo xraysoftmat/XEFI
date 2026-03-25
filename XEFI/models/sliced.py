@@ -3,7 +3,7 @@ Module for the XEFI calculation of a sliced set of layers, decomposed into a spe
 """
 
 import warnings
-from typing import Callable, override, Literal
+from typing import Callable, Sequence, override, Literal
 
 from matplotlib.axes import Axes, Axes as mplAxes
 from XEFI.results import BaseRoughResult, XEF_method
@@ -437,16 +437,16 @@ class SlicedResult(BaseRoughResult):
 
 
 def XEF_Sliced(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
-        list[complex]
+        Sequence[complex]
         | npt.NDArray[np.complexfloating]
         | list[Callable]
         | list["asp_complex"]
     ),
-    z_roughness: list[float] | npt.NDArray[np.floating],
+    z_roughness: Sequence[float | int] | npt.NDArray[np.floating],
     slice_thickness: float = 1.0,
     sigmas: float = 4.0,
     enforce_boundary: bool = True,
