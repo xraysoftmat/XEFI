@@ -7,6 +7,37 @@ CHANGELOG
 ..
     version list
 
+.. _changelog-v0.2.0:
+
+v0.2.0 (2026-03-25)
+===================
+
+Bug Fixes
+---------
+
+* **BasicResult**: Fix gridding bugs (`7684828`_)
+
+* **results.py**: Fix inconsistent angle plotting (`d22bba6`_)
+
+Documentation
+-------------
+
+* **docs**: Major update to documentation (`15398cf`_)
+
+* **README.rst**: Add Zenodo badge (`ed6a901`_)
+
+Features
+--------
+
+* **results.py**: Add 1D calculation (only thickness dependence) (`1d37948`_)
+
+.. _15398cf: https://github.com/xraysoftmat/XEFI/commit/15398cf6d1ab8afade588f3a7b6a181aa4407282
+.. _1d37948: https://github.com/xraysoftmat/XEFI/commit/1d379485f643b47a26309c50b6fdd091f66b409d
+.. _7684828: https://github.com/xraysoftmat/XEFI/commit/7684828a2acb94bb1cb6b584729564d954c0d1ee
+.. _d22bba6: https://github.com/xraysoftmat/XEFI/commit/d22bba6626100b8a785e668709468b77a0b7e720
+.. _ed6a901: https://github.com/xraysoftmat/XEFI/commit/ed6a90179cd5a270a29ca57a67f4976670b13699
+
+
 .. _changelog-v0.1.0:
 
 v0.1.0 (2026-03-19)
