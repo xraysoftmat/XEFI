@@ -301,7 +301,27 @@ class BaseResult(metaclass=ABCMeta):
         if L != 1 and M != 1:
             raise NotImplementedError("Nope")
         elif L == 1 and M == 1:
-            raise NotImplementedError("Nope")
+            T = self.T
+            R = self.R
+            # For each layer
+            for i in range(N + 1):
+                subset = layer_idxs == i  # Get the indices for this layer
+                z_subset = z_vals[subset]  # Get the z values for this layer
+                # Calculate the distance into the layer from the top of the layer.
+                d = (
+                    z_subset - z0[i]
+                )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
+                wv = self.wavevectors[i]
+                # wv.imag[wv.imag < 0] *= -1 # Invert complex sign of negatively calculated wavevectors.
+                phase = (
+                    -1j * wv * d
+                )  # indx: angles|energies, z values. Invert complex sign of phase for downward propagating wave.
+                transmission = T[i] * np.exp(phase)  # indx: angles|energies, z values
+                reflection = (
+                    R[i] * np.exp(-phase) if i < N else np.zeros_like(transmission)
+                )
+                E_total[0, 0, subset] = transmission + reflection
+            return np.squeeze(E_total)  # Remove excess dimensions.
         else:
             assert L == 1 or M == 1
 
@@ -763,8 +783,7 @@ class BaseResult(metaclass=ABCMeta):
 
         # Get the sliced x-data.
         x_selection, x_data, _ = self._require_singular_x_data(
-            m_index=m_index,
-            l_index=l_index,
+            m_index=m_index, l_index=l_index, angles_in_degrees=angles_in_deg
         )
 
         plot_z: npt.NDArray[np.float64]
@@ -774,10 +793,10 @@ class BaseResult(metaclass=ABCMeta):
         )
         if z_vals is None:
             # Create a linspace of the z-coordinates with 10% padding
-            width = abs(z[-1] - z[0])
+            width = np.max(z) - np.min(z)
             plot_z = np.linspace(
-                z[0] - 0.1 * width,
-                z[-1] + 0.1 * width,
+                np.min(z) - 0.1 * width,
+                np.max(z) + 0.1 * width,
                 1000,
                 dtype=np.float64,
             )
@@ -809,6 +828,7 @@ class BaseResult(metaclass=ABCMeta):
             grid_labels=grid_labels,
             grid_crit=grid_crit,
             labels=labels,
+            angles_in_deg=angles_in_deg,
         )
 
         return fig, ax
@@ -915,6 +935,7 @@ class BaseResult(metaclass=ABCMeta):
     def _add_XEFI_gridding(
         self,
         ax: mplAxes,
+        *,
         l_index: int | None = None,
         m_index: int | None = None,
         grid_z: bool = True,
@@ -923,6 +944,7 @@ class BaseResult(metaclass=ABCMeta):
         grid_kwargs: dict | None = None,
         labels: list[str] | None = None,
         label_kwargs: dict | None = None,
+        angles_in_deg: bool = True,
     ) -> None:
         """
         To add gridding lines.
@@ -957,6 +979,8 @@ class BaseResult(metaclass=ABCMeta):
             The labels for the z layers. If None, defaults to automatic labels.
         label_kwargs : dict | None, optional
             Additional keyword arguments to pass to the label plotting function.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
         """
 
         N, z = self.N, self.z
@@ -965,8 +989,7 @@ class BaseResult(metaclass=ABCMeta):
 
         # Get the sliced x-data.
         x_selection, x_data, critical_angles = self._require_singular_x_data(
-            m_index=m_index,
-            l_index=l_index,
+            m_index=m_index, l_index=l_index, angles_in_degrees=angles_in_deg
         )
 
         ### Add gridding and labels to the layers
@@ -985,36 +1008,50 @@ class BaseResult(metaclass=ABCMeta):
             "linewidth": 0.5,
         }
         gkwargs.update(grid_kwargs or {})
+        # Label kwargs, also apply to vertical labels.
         lkwargs = {
             "color": "white",
             "alpha": 0.7,
-            "transform": ax.get_yaxis_transform(),
         }
         if label_kwargs is not None:
             lkwargs.update(label_kwargs)
+        # Horizontal label kwargs
+        hl_kwargs = dict(
+            transform=ax.get_yaxis_transform(),
+            ha="right",
+            x=1.0,
+        )
+        hl_kwargs.update(lkwargs)
 
         # Layers:
         if grid_z:
             for zi in z:
                 ax.axhline(zi, **gkwargs)
+            ax.text(
+                x=1.01,
+                y=z[0],
+                s="Interfaces",
+                transform=ax.get_yaxis_transform(),
+                color="black",
+                alpha=0.5,
+                ha="left",
+                va="center",
+                rotation=270,
+            )
             if grid_labels and labels is not None:
                 for i, zi in enumerate(z):
                     name = labels[i + 1]
                     ax.text(
-                        x=1.0,
                         y=zi,
                         s=name,
-                        ha="right",
                         va="top",
-                        **lkwargs,
+                        **hl_kwargs,
                     )
                 ax.text(
-                    x=1.0,
                     y=z[0],
                     s=labels[0],
-                    ha="right",
                     va="bottom",
-                    **lkwargs,
+                    **hl_kwargs,
                 )
 
         if grid_crit and x_selection == "theta" and critical_angles is not None:
@@ -1023,6 +1060,7 @@ class BaseResult(metaclass=ABCMeta):
                 angles=x_data,
                 vline_kwargs=gkwargs,
                 label_kwargs=lkwargs,
+                angles_in_deg=angles_in_deg,
             )
 
     def generate_graphic_XEFI_summed(
@@ -1225,7 +1263,7 @@ class BaseResult(metaclass=ABCMeta):
     def _add_crit_angles(
         self,
         ax: mplAxes,
-        angles: npt.NDArray[np.floating],
+        angles: npt.NDArray[np.floating] | None = None,
         angle_labels: list[str] | None = None,
         angles_in_deg: bool = True,
         add_labels: bool = True,
@@ -1269,13 +1307,14 @@ class BaseResult(metaclass=ABCMeta):
             "ha": "center",
             "va": "top",
             "transform": ax.get_xaxis_transform(),
+            "y": 0.99,
         }
         label_args.update(label_kwargs)
 
         crits = self.critical_angles_deg if angles_in_deg else self.critical_angles
         if crits is not None:
             for ang in crits:
-                if ang > angles.min() and ang < angles.max():
+                if angles is None or (ang > angles.min() and ang < angles.max()):
                     ax.axvline(x=ang, **vl_args)
             if angle_labels is None:
                 angle_labels = self.layer_names
@@ -1287,23 +1326,24 @@ class BaseResult(metaclass=ABCMeta):
 
             if angle_labels is not None and add_labels:
                 for i, ang in enumerate(crits):
-                    if ang > angles.min() and ang < angles.max():
+                    if angles is None or (ang > angles.min() and ang < angles.max()):
                         name = (
                             angle_labels[i]
                             if i < len(angle_labels)
                             else f"Critical Angle {i + 1}"
                         )
-                        ax.text(x=ang, y=0.99, s=name, **label_args)
-                ax.text(
-                    x=np.average(crits) if len(crits) > 0 else angles.mean(),
-                    y=1.01,
-                    s="Critical Angles",
-                    transform=ax.get_xaxis_transform(),
-                    color="black",
-                    alpha=0.5,
-                    ha="center",
-                    va="bottom",
-                )
+                        ax.text(x=ang, s=name, **label_args)
+                if len(crits) > 0:
+                    ax.text(
+                        x=np.average(crits),
+                        y=1.01,
+                        s="Critical Angles",
+                        transform=ax.get_xaxis_transform(),
+                        color="black",
+                        alpha=0.5,
+                        ha="center",
+                        va="bottom",
+                    )
 
     def generate_graphic_XEFI(
         self,
@@ -1555,7 +1595,6 @@ class BaseResult(metaclass=ABCMeta):
         zset = [zlim[1]]
         ref_set = [ref_idxs[0]]
         for i, zi in enumerate(z):
-            print(i, ref_idxs[i])
             zset += [zi, zi]
             ref_set += [ref_idxs[i], ref_idxs[i + 1]]
         zset.append(zlim[0])
@@ -1607,21 +1646,74 @@ class BaseResult(metaclass=ABCMeta):
             ax_im.set_ylabel("Wavevector Im")
             ax_im.set_xlabel("Angle (degrees)")
 
-        for i in range(L):
+        wavevectors = self.wavevectors
+        if wavevectors is None:
+            raise ValueError("Wavevectors must be calculated before plotting.")
+
+        if L > 1 and M > 1:
+            theta_deg = self.theta_deg
+            if theta_deg is None or len(theta_deg) != M:
+                raise ValueError(
+                    "Theta degrees array must be calculated and match the number of angles (M) for plotting."
+                )
+
+            for i in range(L):
+                for j in range(N + 1):
+                    if ax_re is not None:
+                        ax_re.plot(
+                            theta_deg,
+                            wavevectors[i, :, j].real,
+                            label=f"Layer {j}, Energy {i}",
+                        )
+                    if ax_im is not None:
+                        ax_im.plot(
+                            theta_deg,
+                            wavevectors[i, :, j].imag,
+                            label=f"Layer {j}, Energy {i}",
+                        )
+            return ax_re, ax_im
+        elif L > 1:
+            energies = self.energies
+            if energies is None or len(energies) != L:
+                raise ValueError(
+                    "Beam energies array must be calculated and match the number of energies (L) for plotting."
+                )
             for j in range(N + 1):
                 if ax_re is not None:
                     ax_re.plot(
-                        self.theta_deg,
-                        self.wavevectors[i, :, j].real,
+                        energies,
+                        wavevectors[:, j].real,
                         label=f"Layer {j}",
                     )
                 if ax_im is not None:
                     ax_im.plot(
-                        self.theta_deg,
-                        self.wavevectors[i, :, j].imag,
+                        energies,
+                        wavevectors[:, j].imag,
                         label=f"Layer {j}",
                     )
-        return ax_re, ax_im
+            return ax_re, ax_im
+        elif M > 1:
+            theta_deg = self.theta_deg
+            if theta_deg is None or len(theta_deg) != M:
+                raise ValueError(
+                    "Theta degrees array must be calculated and match the number of angles (M) for plotting."
+                )
+            for j in range(N + 1):
+                if ax_re is not None:
+                    ax_re.plot(
+                        theta_deg,
+                        wavevectors[:, j].real,
+                        label=f"Layer {j}",
+                    )
+                if ax_im is not None:
+                    ax_im.plot(
+                        theta_deg,
+                        wavevectors[:, j].imag,
+                        label=f"Layer {j}",
+                    )
+            return ax_re, ax_im
+        else:
+            raise ValueError("Cannot plot wavevectors: both L and M are singular.")
 
     def graph_fresnel(
         self,
@@ -2308,12 +2400,13 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             grid_crit=grid_crit,
             angles_in_deg=angles_in_deg,
         )
-        # if grid_roughness:
-        #     self._add_XEFI_roughness(
-        #         ax,
-        #         l_index=l_index,
-        #         m_index=m_index,
-        #     )
+        if grid_roughness:
+            self._add_XEFI_roughness(
+                ax,
+                l_index=l_index,
+                m_index=m_index,
+                angles_in_deg=angles_in_deg,
+            )
 
         return fig, ax
 
@@ -2322,6 +2415,7 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         ax: mplAxes,
         l_index: int | None = None,
         m_index: int | None = None,
+        angles_in_deg: bool = True,
     ):
         """
         Represent the roughness on the grid by transparent bars.
@@ -2334,6 +2428,8 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
             A singular index to consider for the beam energies. Defaults to None.
         m_index : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
         """
         z = self.z
         zr = self.z_roughness
@@ -2341,6 +2437,7 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         x_selection, x_data, _ = self._require_singular_x_data(
             l_index=l_index,
             m_index=m_index,
+            angles_in_degrees=angles_in_deg,
         )
 
         if x_selection is None:

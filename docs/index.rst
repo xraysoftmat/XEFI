@@ -56,47 +56,6 @@ Supports the use of the `KKCalc` package to calculate the index of refraction wi
    :alt: Screenshot of an XEFI generated map.
    :align: center
 
-The Model
-#########
-To make this model representative of the code, we count $N+1$ layers from $i=0$ to $i=N$ inclusive, as `python` indexes.
-
-.. image:: ./source/_static/graphics/geometry.png
-   :alt: Screenshot of the XEFI model geometry.
-   :align: center
-
-Here, layers :math:`i=0` and :math:`i=N` are semi-infinite layers, typically modelling air/vacuum and a substrate respectively. Boundary conditions allow us to set the incident amplitude :math:`T_0 = 1`, and the reflected amplitude :math:`R_{N}=0`. We define the following quantities:
-
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| **Variable**        | **Description**                                                                                       |
-+=====================+=======================================================================================================+
-| :math:`N`           | The number of interfaces between the top and bottom layers, corresponding to :math:`N+1` layers       |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`i`           | The layer number, indexed from 0 (i.e. 0 to :math:`N`)                                                |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`z_i`         | The depth of the $i^{th}$ interface (:math:`z_i < 0`).                                                |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`d_i`         | The thickness of the $i^{th}$ layer (:math:`d_0 = d_N = ∞`)                                           |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`θ^t_i`       | The transmitted angle of incidence in layer :math:`i`.                                                |
-|                     | Same as the angle of reflection :math:`θ^r_i` in layer:math:`i`.                                      |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`k_i`         | The z-component of the wavevector in the :math:`i^{th}` layer.                                        |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`T_i`         | The complex amplitude of the downward propogating electric field at interface :math:`i`.              |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`R_i`         | The complex amplitude of the upward propogating electric field at interface :math:`i`.                |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`X_i`         | The ratio of the downward and upward propogating electric field intensities at interface :math:`i`.   |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`E^{Total}_i` | The total electric field in layer :math:`i`.                                                          |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-| :math:`E_{beam}`    | The X-ray beam energy in eV.                                                                          |
-+---------------------+-------------------------------------------------------------------------------------------------------+
-
-After recursively computing the ratio :math:`X_i`, then solving the amplitudes :math:`T_i`, :math:`R_i` at each interface, then the total electric field at depth :math:`z` in the film can then be calculated as the sum of downward and upward propogating waves:
-
-$$E^{Total}_i(E_{beam}, θ^t_0, z) = T_i(E_{beam}, θ^t    _0) exp(-i k_i (z-z_i))   + R_i  (E_{beam}, θ^t_0) exp(i k_i (z-z_i))$$
-
 Links
 #####
 

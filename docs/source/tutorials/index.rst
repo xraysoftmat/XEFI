@@ -18,6 +18,12 @@ The package is broken into two types of important classes/functions.
 
 Select a model to get started.
 
+
+.. toctree::
+    :maxdepth: 2
+
+    theory
+
 .. toctree::
     :caption: Models
     :maxdepth: 2
@@ -29,5 +35,6 @@ Select a model to get started.
     :caption: Advanced
     :maxdepth: 2
 
-    advanced/fitting
+    advanced/kkcalc2
+    advanced/energy
     advanced/algorithms

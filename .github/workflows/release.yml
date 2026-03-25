@@ -254,7 +254,7 @@ jobs:
           path: ./dist/docs/
 
       - name: Config | Re-zip Artifacts for PSR
-        if: ${{ always() && inputs.gui }}
+        if: ${{ always() }}
         # Files are in subdirectories.
         # echo "Removing original file $file..."
         # rm -rf "$file"
@@ -298,8 +298,8 @@ jobs:
       needs.py-sem-rel-version.result == 'success' &&
       needs.py-sem-rel-version.outputs.released == 'true' &&
       needs.py-sem-rel-publish.result == 'success' &&
-      !inputs.noop &&
-      (github.repository_owner == 'benajamin' || github.repository_owner == 'xraysoftmat')
+      (github.repository_owner == 'benajamin' || github.repository_owner == 'xraysoftmat') &&
+      (!inputs.noop)
     # Only run this job on the master account, only publish to PyPI on tag pushes
     permissions:
       contents: read

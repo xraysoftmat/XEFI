@@ -2,40 +2,20 @@
 Module for the XEFI calculation of a basic set of layers.
 """
 
+# std.lib
+from typing import Callable, Sequence, override, overload
+import warnings
+
+# internal
+from XEFI.results import BaseResult, BaseRoughResult, XEF_method
+from XEFI.utils import en2wvec, HAS_KKCALC
+
+# external
 import numpy as np
 import numpy.typing as npt
-from typing import Callable, override, overload
-from XEFI.results import BaseResult, BaseRoughResult, XEF_method
-import warnings
-import scipy.constants as sc
 
-en2wav: float = sc.h * sc.c / sc.e * 1e10
-r"""
-Conversion factor from energy in eV to wavelength in angstroms.
-
-.. math::
-    \lambda = (h \times c) / (E \times e)
-    wav = en2wav / E
-
-"""
-en2wvec: float = 2 * sc.pi / en2wav
-r"""
-Conversion factor from energy in eV to wavevector in inverse angstroms.
-
-.. math::
-    \lambda = (h \times c) / (E \times e) * 1e10
-    \lambda = en2wav / E
-    \k = 2 \pi / (\lambda)
-    \k = en2wvec * E
-"""
-
-# Support for KKCalc
-try:
-    from kkcalc.models.polynomials import asp_complex
-
-    has_KKCalc = True
-except ImportError:
-    has_KKCalc = False
+if HAS_KKCALC:
+    from kkcalc2.models.polynomials import asp_complex
 
 
 class BasicResult(BaseResult):
@@ -175,9 +155,9 @@ class BasicRoughResult(BaseRoughResult):
 
 @overload
 def XEF_Basic(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
         | npt.NDArray[np.complexfloating]
@@ -194,9 +174,9 @@ def XEF_Basic(
 
 @overload
 def XEF_Basic(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
         | npt.NDArray[np.complexfloating]
@@ -205,16 +185,16 @@ def XEF_Basic(
     ),
     *,
     method: XEF_method | str = XEF_method.DEV,
-    z_roughness: list[float | int] | npt.NDArray[np.floating],
+    z_roughness: Sequence[float | int] | npt.NDArray[np.floating],
     layer_names: list[str] | None = None,
     angles_in_deg: bool = True,
 ) -> BasicRoughResult: ...
 
 
 def XEF_Basic(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
         | npt.NDArray[np.complexfloating]
@@ -223,7 +203,7 @@ def XEF_Basic(
     ),
     *,
     method: XEF_method | str = XEF_method.DEV,
-    z_roughness: list[float | int] | npt.NDArray[np.floating] | None = None,
+    z_roughness: Sequence[float | int] | npt.NDArray[np.floating] | None = None,
     layer_names: list[str] | None = None,
     angles_in_deg: bool = True,
 ) -> BasicResult | BasicRoughResult:
@@ -232,11 +212,11 @@ def XEF_Basic(
 
     Parameters
     ----------
-    energies : list[float] | npt.NDArray[np.floating] | float
+    energies : Sequence[float | int] | npt.NDArray[np.floating] | float | int
         The beam energy(s) in eV. Can be a single value or an array of values.
-    angles : list[float] | npt.NDArray[np.floating] | float
+    angles : Sequence[float | int] | npt.NDArray[np.floating] | float | int
         The angles in degrees at which to calculate the XEFI. Can be a single value or an array of values.
-    z : list[float] | npt.NDArray[np.floating]
+    z : Sequence[float | int] | npt.NDArray[np.floating]
         The interface locations in Angstroms. Must be a list or array of floats.
     refractive_indices : list[complex] | npt.NDArray[np.complexfloating] | list[Callable] | list["asp_complex"]
         The refractive indices for each energy and layer.
@@ -244,7 +224,7 @@ def XEF_Basic(
         a list of `KKCalc` `asp_complex` objects (N+1), or a list of Callable functions that return complex numbers (N+1).
     method : XEF_method | str
         The method to use for the calculation, by default `XEF_method.dev`.
-    z_roughness : list[float] | npt.NDArray[np.floating] | None, optional
+    z_roughness : Sequence[float | int] | npt.NDArray[np.floating] | None, optional
         The roughness of the interfaces in Angstroms. If provided, it should be a list or array of floats with the same length as `z`.
         If None, no roughness is applied, by default None.
     layer_names : list[str] | None, optional
@@ -305,6 +285,13 @@ def XEF_Basic(
             "Layer names must match the number of layers (N+1)."
         )
         result.layer_names = layer_names.copy()
+    elif HAS_KKCALC and any(isinstance(ref, asp_complex) for ref in refractive_indices):  # pyright: ignore
+        result.layer_names = [
+            ref.name
+            if (ref.name is not None and isinstance(ref, asp_complex))  # pyright: ignore
+            else f"Layer {i}"
+            for i, ref in enumerate(refractive_indices)
+        ]
     else:
         result.layer_names = None
         layer_names = [f"Layer {i}" for i in range(N + 1)]
@@ -367,7 +354,7 @@ def XEF_Basic(
             )
     elif (
         isinstance(refractive_indices, (list, np.ndarray))
-        and has_KKCalc
+        and HAS_KKCALC
         # Allow float for vacuum or air - i.e. no material absorption.:
         and all(
             isinstance(n, (float, complex, asp_complex)) for n in refractive_indices
@@ -391,8 +378,10 @@ def XEF_Basic(
         isinstance(refractive_indices, list)
         and len(refractive_indices) == N + 1
         and all(
-            callable(n) for n, i in enumerate(refractive_indices) if i != 0
-        )  # Allow for first layer to be air or vacuum with n=1
+            callable(n) or (isinstance(n, (float, int, complex)) and n == 1)
+            # Allow for first layer to be air or vacuum with n=1
+            for n in refractive_indices
+        )
     ):
         # Valid refractive indices for multiple energies using Callable
         ref_idxs = np.zeros((L, N + 1), dtype=np.complex128)
@@ -402,13 +391,16 @@ def XEF_Basic(
         for i, mat_n in enumerate(
             refractive_indices
         ):  # Iterate over the layers, apply the energy.
-            if i == 0 and (isinstance(mat_n, (int, float))):
+            if isinstance(mat_n, (int, float)):
                 ref_idxs[:, i] = mat_n + 0j  # Convert to complex
+                continue
+            elif isinstance(mat_n, complex):
+                ref_idxs[:, i] = mat_n
                 continue
             assert callable(mat_n)
             if L == 1:
-                ref_idxs[0, i] = mat_n(
-                    energies
+                ref_idxs[0, i] = np.squeeze(
+                    mat_n(energies)
                 )  # Apply the energy to the Callable function
             elif single_energy_calc:
                 for j in range(L):
@@ -438,7 +430,7 @@ def XEF_Basic(
 
     ## Generate result data
     # Wavevector magnitude in vacuum
-    k0: npt.NDArray[np.floating] = en2wvec * energies  # convert energy to wavevector.
+    k0: npt.NDArray[np.floating] = en2wvec(energies)  # convert energy to wavevector.
     """The wavevector magnitude (per angstrom) in vacuum for each energy (L)."""
     result.k0 = k0
 

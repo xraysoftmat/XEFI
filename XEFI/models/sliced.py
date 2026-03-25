@@ -3,7 +3,7 @@ Module for the XEFI calculation of a sliced set of layers, decomposed into a spe
 """
 
 import warnings
-from typing import Callable, override, Literal
+from typing import Callable, Sequence, override, Literal
 
 from matplotlib.axes import Axes, Axes as mplAxes
 from XEFI.results import BaseRoughResult, XEF_method
@@ -17,12 +17,10 @@ import numpy as np
 import numpy.typing as npt
 from scipy import special as sp
 
-try:
-    from kkcalc.models import asp_complex
+from XEFI.utils import HAS_KKCALC
 
-    has_KKCalc = True
-except ImportError:
-    has_KKCalc = False
+if HAS_KKCALC:
+    from kkcalc2.models import asp_complex
 
 
 class SlicedResult(BaseRoughResult):
@@ -137,7 +135,7 @@ class SlicedResult(BaseRoughResult):
         if ax_re is not None or ax_im is not None:
             pre_N = self.pre_N
             L = self.L
-            pre_ref_idxs = self.pre_refractive_indices
+            pre_ref_idxs = np.squeeze(self.pre_refractive_indices)
             assert pre_N is not None
             assert pre_ref_idxs is not None
             if l_index is not None:
@@ -156,7 +154,7 @@ class SlicedResult(BaseRoughResult):
                         y=pre_ref_idxs[i].real, color="C1", linestyle="--", alpha=0.5
                     )
 
-        return
+        return result
 
     # @override
     @BaseRoughResult.critical_angles_deg.getter
@@ -265,12 +263,16 @@ class SlicedResult(BaseRoughResult):
     def _add_XEFI_gridding(
         self,
         ax: Axes,
+        *,
         l_index: int | None = None,
         m_index: int | None = None,
         grid_z: bool = True,
         grid_labels: bool = True,
         grid_crit: bool = True,
+        grid_kwargs: dict | None = None,
         labels: list[str] | None = None,
+        label_kwargs: dict | None = None,
+        angles_in_deg: bool = True,
     ) -> None:
         """
         To add gridding lines.
@@ -302,8 +304,14 @@ class SlicedResult(BaseRoughResult):
             Whether to plot the z layer labels. Defaults to True.
         grid_crit : float, optional
             Whether to plot the critical angles grid. Defaults to True.
+        grid_kwargs : dict | None, optional
+            Additional keyword arguments for the grid lines. Defaults to None.
         labels : list[str] | None, optional
             The labels for the z layers. If None, defaults to automatic labels.
+        label_kwargs : dict | None, optional
+            Additional keyword arguments for the layer labels. Defaults to None.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
         """
         pre_N, pre_z = self.pre_N, self.pre_z
         assert pre_N is not None
@@ -313,6 +321,7 @@ class SlicedResult(BaseRoughResult):
         x_selection, x_data, critical_angles = self._require_singular_x_data(
             m_index=m_index,
             l_index=l_index,
+            angles_in_degrees=angles_in_deg,
         )
 
         ### Add gridding and labels to the layers
@@ -322,6 +331,30 @@ class SlicedResult(BaseRoughResult):
                 labels = result_labels
             else:
                 labels = [f"Layer {i}" for i in range(pre_N + 1)]
+
+        # Update keywords
+        gkwargs = {
+            "color": "white",
+            "linestyle": "--",
+            "alpha": 0.2,
+            "linewidth": 0.5,
+        }
+        gkwargs.update(grid_kwargs or {})
+        # Label kwargs, also apply to vertical labels.
+        lkwargs = {
+            "color": "white",
+            "alpha": 0.7,
+        }
+        if label_kwargs is not None:
+            lkwargs.update(label_kwargs)
+        # Horizontal label kwargs
+        hl_kwargs = dict(
+            transform=ax.get_yaxis_transform(),
+            ha="right",
+            x=1.0,
+        )
+        hl_kwargs.update(lkwargs)
+
         # Layers:
         if grid_z:
             for zi in pre_z:
@@ -330,45 +363,26 @@ class SlicedResult(BaseRoughResult):
                 for i, zi in enumerate(pre_z):
                     name = labels[i + 1]
                     ax.text(
-                        x=1.0,
                         y=zi,
                         s=name,
-                        transform=ax.get_yaxis_transform(),
-                        ha="right",
                         va="top",
-                        color="white",
+                        **hl_kwargs,
                     )
                 ax.text(
-                    x=1.0,
                     y=pre_z[0],
                     s=labels[0],
-                    transform=ax.get_yaxis_transform(),
-                    ha="right",
                     va="bottom",
-                    color="white",
+                    **hl_kwargs,
                 )
 
-        # Critical Angles
-        if (
-            grid_crit and x_selection == "theta" and critical_angles is not None
-        ):  # Is a angle plot.
-            for ang in critical_angles:
-                if ang > x_data.min() and ang < x_data.max():
-                    ax.axvline(
-                        x=ang, color="white", linestyle="--", alpha=0.2, linewidth=0.5
-                    )
-            if grid_labels and labels is not None:
-                for i, ang in enumerate(critical_angles):
-                    if ang > x_data.min() and ang < x_data.max():
-                        name = labels[i + 1]
-                        ax.text(
-                            x=ang,
-                            y=0.00,
-                            s=name,
-                            transform=ax.get_xaxis_transform(),
-                            color="white",
-                            ha="center",
-                        )
+        if grid_crit and x_selection == "theta" and critical_angles is not None:
+            self._add_crit_angles(
+                ax=ax,
+                angles=x_data,
+                vline_kwargs=gkwargs,
+                label_kwargs=lkwargs,
+                angles_in_deg=angles_in_deg,
+            )
 
     @override
     def _add_XEFI_roughness(
@@ -376,6 +390,7 @@ class SlicedResult(BaseRoughResult):
         ax: mplAxes,
         l_index: int | None = None,
         m_index: int | None = None,
+        angles_in_deg: bool = True,
     ):
         """
         Represent the roughness on the grid by transparent bars.
@@ -388,10 +403,13 @@ class SlicedResult(BaseRoughResult):
             A singular index to consider for the beam energies. Defaults to None.
         m_index : int | None, optional
             A singular index to consider for the angles of incidence. Defaults to None.
+        angles_in_deg : bool, optional
+            Whether the angles are in degrees (True) or radians (False). Defaults to True.
         """
         x_selection, x_data, _ = self._require_singular_x_data(
             l_index=l_index,
             m_index=m_index,
+            angles_in_degrees=angles_in_deg,
         )
         if x_selection is None:
             raise ValueError(
@@ -419,16 +437,16 @@ class SlicedResult(BaseRoughResult):
 
 
 def XEF_Sliced(
-    energies: list[float] | npt.NDArray[np.floating] | float,
-    angles: list[float] | npt.NDArray[np.floating] | float,
-    z: list[float | int] | npt.NDArray[np.floating | np.integer],
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
-        list[complex]
+        Sequence[complex]
         | npt.NDArray[np.complexfloating]
         | list[Callable]
         | list["asp_complex"]
     ),
-    z_roughness: list[float] | npt.NDArray[np.floating],
+    z_roughness: Sequence[float | int] | npt.NDArray[np.floating],
     slice_thickness: float = 1.0,
     sigmas: float = 4.0,
     enforce_boundary: bool = True,
@@ -612,7 +630,7 @@ def XEF_Sliced(
             )
     elif (
         isinstance(refractive_indices, (list, np.ndarray))
-        and has_KKCalc
+        and HAS_KKCALC
         # Allow float for vacuum or air - i.e. no material absorption.:
         and all(
             isinstance(n, (float, complex, asp_complex)) for n in refractive_indices
@@ -636,7 +654,8 @@ def XEF_Sliced(
         isinstance(refractive_indices, list)
         and len(refractive_indices) == pre_N + 1
         and all(
-            callable(n) if (n != 1) else True for n in refractive_indices
+            callable(n) or (isinstance(n, (int, float, complex)) and n == 1)
+            for n in refractive_indices
         )  # Allow for any layer to be air or vacuum with n=1
     ):
         # Valid refractive indices for multiple energies using Callable
@@ -647,14 +666,18 @@ def XEF_Sliced(
         for i, mat_n in enumerate(
             refractive_indices
         ):  # Iterate over the layers, apply the energy.
-            if isinstance(mat_n, (int, float, complex)) and mat_n == 0:
-                pre_ref_idxs[:, i] = mat_n + 0j  # Convert to complex
+            # Allow for any layer to be air or vacuum with n=1, even when using
+            # Callable functions for other layers.
+            if isinstance(mat_n, (int, float, complex)) and mat_n == 1:
+                pre_ref_idxs[:, i] = 1 + 0j  # Convert to complex
                 continue
 
-            assert callable(mat_n)
+            assert callable(mat_n), (
+                f"The {i}th refractive index is not callable, but is instead {mat_n} of type {type(mat_n)}."
+            )
             if L == 1:
-                pre_ref_idxs[0, i] = mat_n(
-                    energies
+                pre_ref_idxs[0, i] = np.squeeze(
+                    mat_n(energies)
                 )  # Apply the energy to the Callable function
             elif single_energy_calc:
                 for j in range(L):
@@ -773,13 +796,20 @@ def XEF_Sliced(
             "Layer names must match the number of pre-sliced layers (pre_N+1)."
         )
         result.layer_names = layer_names.copy()
+    elif HAS_KKCALC and any(
+        isinstance(ref, (asp_complex)) for ref in refractive_indices
+    ):
+        result.layer_names = [
+            ref.name if ref.name is not None else f"Layer {i}"
+            for i, ref in enumerate(refractive_indices)
+        ]
     else:
         result.layer_names = None
         layer_names = [f"Layer {i}" for i in range(N + 1)]
 
     ## Generate result data
     # Wavevector magnitude in vacuum
-    k0: npt.NDArray[np.floating] = en2wvec * energies  # convert energy to wavevector.
+    k0: npt.NDArray[np.floating] = en2wvec(energies)  # convert energy to wavevector.
     """The wavevector magnitude (per angstrom) in vacuum for each energy (L)."""
     result.k0 = k0
 
