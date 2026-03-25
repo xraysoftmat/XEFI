@@ -301,7 +301,29 @@ class BaseResult(metaclass=ABCMeta):
         if L != 1 and M != 1:
             raise NotImplementedError("Nope")
         elif L == 1 and M == 1:
-            raise NotImplementedError("Nope")
+            T = self.T
+            R = self.R
+            # For each layer
+            for i in range(N + 1):
+                subset = layer_idxs == i  # Get the indices for this layer
+                z_subset = z_vals[subset]  # Get the z values for this layer
+                # Calculate the distance into the layer from the top of the layer.
+                d = (
+                    z_subset - z0[i]
+                )  # for semi-infinite i=0, we flip, for i=N, we use the last z value.
+                wv = self.wavevectors[i]
+                # wv.imag[wv.imag < 0] *= -1 # Invert complex sign of negatively calculated wavevectors.
+                phase = (
+                    -1j * wv * d
+                )  # indx: angles|energies, z values. Invert complex sign of phase for downward propagating wave.
+                transmission = T[i] * np.exp(phase)  # indx: angles|energies, z values
+                reflection = (
+                    R[i] * np.exp(-phase)
+                    if i < N
+                    else np.zeros_like(transmission)
+                )
+                E_total[0, 0, subset] = transmission + reflection
+            return np.squeeze(E_total)  # Remove excess dimensions.
         else:
             assert L == 1 or M == 1
 
