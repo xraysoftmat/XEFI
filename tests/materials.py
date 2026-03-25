@@ -1,9 +1,10 @@
-
 from typing import TypedDict
+
 
 class Material(TypedDict):
     formula: str
     density: float
+
 
 P3HT: Material = {
     "formula": "C10H14S",
@@ -21,13 +22,8 @@ Si: Material = {
 }
 
 Air: Material = {
-    "formula": "N78O20Ar1", # A very rough approximation of air.
+    "formula": "N78O20Ar1",  # A very rough approximation of air.
     "density": 1.225e-3,
 }
 
-MATERIALS: dict[str, Material] = {
-    "P3HT": P3HT,
-    "PS": PS,
-    "Si": Si,
-    "Air": Air
-}
+MATERIALS: dict[str, Material] = {"P3HT": P3HT, "PS": PS, "Si": Si, "Air": Air}

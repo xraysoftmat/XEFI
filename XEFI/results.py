@@ -318,9 +318,7 @@ class BaseResult(metaclass=ABCMeta):
                 )  # indx: angles|energies, z values. Invert complex sign of phase for downward propagating wave.
                 transmission = T[i] * np.exp(phase)  # indx: angles|energies, z values
                 reflection = (
-                    R[i] * np.exp(-phase)
-                    if i < N
-                    else np.zeros_like(transmission)
+                    R[i] * np.exp(-phase) if i < N else np.zeros_like(transmission)
                 )
                 E_total[0, 0, subset] = transmission + reflection
             return np.squeeze(E_total)  # Remove excess dimensions.
