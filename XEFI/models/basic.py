@@ -216,7 +216,7 @@ def XEF_Basic(
         The beam energy(s) in eV. Can be a single value or an array of values.
     angles : Sequence[float | int] | npt.NDArray[np.floating] | float | int
         The angles in degrees at which to calculate the XEFI. Can be a single value or an array of values.
-    z : Sequence[float | int] | npt.NDArray[np.floating | np.integer]
+    z : Sequence[float | int] | npt.NDArray[np.floating]
         The interface locations in Angstroms. Must be a list or array of floats.
     refractive_indices : list[complex] | npt.NDArray[np.complexfloating] | list[Callable] | list["asp_complex"]
         The refractive indices for each energy and layer.

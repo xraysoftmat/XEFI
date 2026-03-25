@@ -70,8 +70,9 @@ class TestEquivalence:
         sliced_intensities = sliced_result(z_vals)
         difference = np.abs(basic_intensities - sliced_intensities)
         sum_diff = np.sum(difference)
+        sum_basic = np.sum(np.abs(basic_intensities))
         perc_diff = difference / np.abs(basic_intensities) * 100
         ave_perc_diff = np.mean(perc_diff)
         assert ave_perc_diff < 10, (
-            f"Average percentage difference is too high: {ave_perc_diff:.2f}%"
+            f"Average percentage difference is too high: {ave_perc_diff:.2f}%. Total difference: {sum_diff:.2e}, with total basic intensity: {sum_basic:.2e}."
         )
