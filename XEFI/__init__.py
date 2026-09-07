@@ -2,21 +2,20 @@
 XEFI provides tools for simulating and fitting X-ray Electric Field Intensity profiles.
 """
 
-from XEFI import utils
-from XEFI import models
+# import XEFI.fitting as fitting
+import importlib.metadata
+
+from XEFI import models, utils
 from XEFI.models import (
-    XEF_Basic,
-    XEF_Sliced,
-    SlicedResult,
     BasicResult,
     BasicRoughResult,
+    SlicedResult,
+    XEF_Basic,
+    XEF_Sliced,
 )
 from XEFI.results import (
     XEF_method,
 )
-# import XEFI.fitting as fitting
-
-import importlib.metadata
 
 # Calculate the __version__ from the pyproject.toml file
 __version__ = importlib.metadata.version("XEFI")
