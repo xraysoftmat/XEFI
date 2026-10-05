@@ -3,16 +3,17 @@ Module for the XEFI calculation of a basic set of layers.
 """
 
 # std.lib
-from typing import Callable, Sequence, override, overload
 import warnings
-
-# internal
-from XEFI.results import BaseResult, BaseRoughResult, XEF_method
-from XEFI.utils import en2wvec, HAS_KKCALC
+from collections.abc import Callable, Sequence
+from typing import overload, override
 
 # external
 import numpy as np
 import numpy.typing as npt
+
+# internal
+from XEFI.results import BaseResult, BaseRoughResult, XEF_method
+from XEFI.utils import HAS_KKCALC, en2wvec
 
 if HAS_KKCALC:
     from kkcalc2.models.polynomials import asp_complex
@@ -155,8 +156,8 @@ class BasicRoughResult(BaseRoughResult):
 
 @overload
 def XEF_Basic(
-    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
-    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float,
     z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
@@ -174,8 +175,8 @@ def XEF_Basic(
 
 @overload
 def XEF_Basic(
-    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
-    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float,
     z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
@@ -192,8 +193,8 @@ def XEF_Basic(
 
 
 def XEF_Basic(
-    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
-    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float,
     z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         list[complex]
@@ -761,7 +762,7 @@ def XEF_Parratt_Tolan(
     T[:, :, 0] = 1  # T1 condition
     R[:, :, 0] = X[:, :, 0]  # Equation 2.18 - X1,R1 condition
 
-    for i in range(0, N):  # i=interface
+    for i in range(N):  # i=interface
         wv_diff = wavevectors[:, :, i + 1] - wavevectors[:, :, i]
         wv_add = wavevectors[:, :, i + 1] + wavevectors[:, :, i]
         phase1 = 1j * (wv_add) * z[i]
@@ -882,7 +883,7 @@ def XEF_Parratt_Dev(
     R[:, :, 0] = X[:, :, 0]  # already normalized transmission to one.
     T[:, :, 0] = 1.0  # Incident field normalized to one.
 
-    for j in range(0, N):
+    for j in range(N):
         # To calculate R and T, we need X_j+1, X_j, a_j, a_j+1, r_j, d_j, d_j+1
 
         # Thicknesses & a_j factors
