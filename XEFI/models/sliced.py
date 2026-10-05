@@ -3,20 +3,22 @@ Module for the XEFI calculation of a sliced set of layers, decomposed into a spe
 """
 
 import warnings
-from typing import Callable, Sequence, override, Literal
+from collections.abc import Callable, Sequence
+from typing import Literal, override
 
-from matplotlib.axes import Axes, Axes as mplAxes
-from XEFI.results import BaseRoughResult, XEF_method
-from XEFI.models.basic import (
-    XEF_Parratt_Dev,
-    XEF_Parratt_Tolan,
-    XEF_Abeles_Ohta,
-    en2wvec,
-)
 import numpy as np
 import numpy.typing as npt
+from matplotlib.axes import Axes
+from matplotlib.axes import Axes as mplAxes
 from scipy import special as sp
 
+from XEFI.models.basic import (
+    XEF_Abeles_Ohta,
+    XEF_Parratt_Dev,
+    XEF_Parratt_Tolan,
+    en2wvec,
+)
+from XEFI.results import BaseRoughResult, XEF_method
 from XEFI.utils import HAS_KKCALC
 
 if HAS_KKCALC:
@@ -120,7 +122,6 @@ class SlicedResult(BaseRoughResult):
         ax_im: Axes | None = None,
         l_index: int | None = None,
     ) -> tuple[Axes, Axes] | None:
-        #
         result = super().graph_refractive_indexes(
             ax_re=ax_re,
             ax_im=ax_im,
@@ -437,8 +438,8 @@ class SlicedResult(BaseRoughResult):
 
 
 def XEF_Sliced(
-    energies: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
-    angles: Sequence[float | int] | npt.NDArray[np.floating] | float | int,
+    energies: Sequence[float | int] | npt.NDArray[np.floating] | float,
+    angles: Sequence[float | int] | npt.NDArray[np.floating] | float,
     z: Sequence[float | int] | npt.NDArray[np.floating | np.integer],
     refractive_indices: (
         Sequence[complex]
