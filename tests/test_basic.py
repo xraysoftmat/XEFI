@@ -2,11 +2,12 @@
 Tests for the `models.basic` XEFI module.
 """
 
+import numpy as np
 import pytest
+
+from XEFI import XEF_Basic, XEF_method
 from XEFI.models import BasicRoughResult
 from XEFI.results import BaseResult, BaseRoughResult
-from XEFI import XEF_method, XEF_Basic
-import numpy as np
 
 
 def base_attributes_defined(result: BaseResult, are_defined: bool = True):
