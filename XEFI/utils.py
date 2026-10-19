@@ -5,9 +5,10 @@ Includes external dependencies and helper functions for the XEFI package.
 """
 
 # External dependencies
-import scipy.constants as sc
-import numpy.typing as npt
 import typing
+
+import numpy.typing as npt
+import scipy.constants as sc
 
 # Check for optional dependencies
 HAS_KKCALC: bool
