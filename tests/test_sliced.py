@@ -2,11 +2,12 @@
 Tests for the `model.sliced` XEFI module.
 """
 
-import pytest
-from XEFI.models import SlicedResult
-from XEFI import XEF_method, XEF_Sliced
-from tests.test_basic import base_rough_attributes_defined
 import numpy as np
+import pytest
+
+from tests.test_basic import base_rough_attributes_defined
+from XEFI import XEF_method, XEF_Sliced
+from XEFI.models import SlicedResult
 
 
 def sliced_attributes_defined(result: SlicedResult, are_defined: bool = True):
