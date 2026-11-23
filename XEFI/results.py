@@ -2,29 +2,30 @@
 A module for basic result handling in XEFI.
 """
 
-from typing import Any, Literal, TypeVar, override, Iterable
-from abc import ABCMeta
-from enum import Enum
 import warnings
-
-from matplotlib.ticker import MaxNLocator
-import numpy as np
-import numpy.typing as npt
+from abc import ABCMeta
+from collections.abc import Iterable
+from enum import Enum
+from typing import Any, Literal, TypeVar, override
 
 # TODO: Make matplotlib and plotly optional dependencies.
 # try:
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure as mplFig, SubFigure as mplSubFig
+import numpy as np
+import numpy.typing as npt
 from matplotlib.axes import Axes as mplAxes
 from matplotlib.colors import Colormap, LogNorm, Normalize
+from matplotlib.figure import Figure as mplFig
+from matplotlib.figure import SubFigure as mplSubFig
+from matplotlib.ticker import MaxNLocator
 
 #     has_mpl = True
 # except ImportError:
 #     has_mpl = False
 
 # try:
-#     import plotly.express as px  # noqa: F401
-#     from plotly.graph_objects import Figure as pxFig  # noqa: F401
+#     import plotly.express as px
+#     from plotly.graph_objects import Figure as pxFig
 #     has_plotly = True
 # except ImportError:
 # has_plotly = False
@@ -1180,11 +1181,9 @@ class BaseResult(metaclass=ABCMeta):
         else:
             intensity_profiles.append(self.summed_intensity(plot_z))
             intensity_labels.append(
-                (
-                    rf"$\sum\nolimits_{{z={plot_z.min():0.1f}}}^{{z={plot_z.max():0.1f}}} \mathcal{{I}}$"
-                    if plt.rcParams["text.usetex"] is True
-                    else rf"$\sum\mathcal{{I}}$ (${{z={plot_z.min():0.1f}}}\to{{{plot_z.max():0.1f}}}$ Å) "
-                )
+                rf"$\sum\nolimits_{{z={plot_z.min():0.1f}}}^{{z={plot_z.max():0.1f}}} \mathcal{{I}}$"
+                if plt.rcParams["text.usetex"] is True
+                else rf"$\sum\mathcal{{I}}$ (${{z={plot_z.min():0.1f}}}\to{{{plot_z.max():0.1f}}}$ Å) "
             )
 
         self._add_XEFI_summed_intensity(
@@ -2312,7 +2311,6 @@ class BaseRoughResult(BaseResult, metaclass=ABCMeta):
         super().reset()
         # Reset new properties
         self.z_roughness = None
-        return
 
     @override
     def generate_graphic_XEFI_map(

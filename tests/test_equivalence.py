@@ -2,13 +2,15 @@
 Tests the consistency between methods in the XEFI Module.
 """
 
+import kkcalc2 as kk
+import numpy as np
 import pytest
+
 from XEFI import XEF_Basic, XEF_Sliced
+
+from .materials import MATERIALS
 from .test_basic import base_rough_attributes_defined
 from .test_sliced import sliced_attributes_defined
-from .materials import MATERIALS
-import numpy as np
-import kkcalc2 as kk
 
 
 class TestEquivalence:
